@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Profesor | Universidad de Medellín</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Tu CSS personalizado -->
+  <link rel="stylesheet" href="../CSS/teacher´s_dashboard.css">
+</head>
+
+<body style="background-color: #f9f9f9;">
+
+  <!-- 🔴 Barra superior -->
+  <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #b30000;">
+    <div class="container-fluid">
+      <div class="d-flex align-items-center">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Escudo_de_la_Universidad_de_Medell%C3%ADn.svg/1200px-Escudo_de_la_Universidad_de_Medell%C3%ADn.svg.png"
+             alt="Logo Universidad de Medellín" width="55" class="me-2">
+        <span class="navbar-brand mb-0 h1 fs-4">Universidad de Medellín</span>
+      </div>
+      <button class="btn btn-light fw-semibold" onclick="cerrarSesion()">⏎ Cerrar Sesión</button>
+    </div>
+  </nav>
+
+  <!-- 🧭 Sección de bienvenida -->
+  <div class="container mt-5">
+    <div class="card p-4 shadow-sm">
+      <div class="row align-items-center">
+        <div class="col-md-7">
+          <h1 class="text-danger fw-bold mb-3">Bienvenido, Profesor/a</h1>
+          <p class="fs-5">
+            Gestione de manera eficiente sus cursos, cronogramas y calificaciones. 
+            Su portal centralizado para el éxito académico.
+          </p>
+        </div>
+        <div class="col-md-5 text-center">
+          <img src="https://images.pexels.com/photos/1181375/pexels-photo-1181375.jpeg" 
+               alt="Profesor en clase" class="img-fluid rounded shadow-sm">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🔖 Pestañas de navegación -->
+  <div class="container mt-4">
+    <ul class="nav nav-tabs border-bottom border-2">
+      <li class="nav-item">
+        <button class="nav-link active fw-semibold" id="tab-cronogramas" onclick="mostrarSeccion('cronogramas')">Cronogramas</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link fw-semibold" id="tab-calificaciones" onclick="mostrarSeccion('calificaciones')">Calificaciones</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link fw-semibold" id="tab-reportes" onclick="mostrarSeccion('reportes')">Reportes</button>
+      </li>
+    </ul>
+
+    <!-- 📘 Sección Cronogramas -->
+    <div id="cronogramas" class="mt-4">
+      <div class="row">
+        <!-- Mis cursos -->
+        <div class="col-md-6 mb-4">
+          <h3 class="text-danger mb-3">Mis Cursos y Horarios</h3>
+          <div class="d-grid gap-3">
+            <div class="p-3 border rounded bg-light border-danger-subtle">
+              <b>Introducción a la Programación</b><br>
+              Lunes 10:00–12:00 (Aula B2)
+            </div>
+            <div class="p-3 border rounded bg-white">
+              <b>Álgebra Lineal Aplicada</b><br>
+              Martes 14:00–16:00 (Aula C3)
+            </div>
+            <div class="p-3 border rounded bg-white">
+              <b>Ética Profesional</b><br>
+              Miércoles 08:00–10:00 (Aula A1)
+            </div>
+            <div class="p-3 border rounded bg-white">
+              <b>Filosofía de la Ciencia</b><br>
+              Jueves 11:00–13:00 (Aula B1)
+            </div>
+          </div>
+        </div>
+
+        <!-- Cronograma -->
+        <div class="col-md-6">
+          <h3 class="text-danger mb-3">Visualizar Cronograma</h3>
+          <div class="border rounded p-4 bg-white shadow-sm text-center">
+            <h5 class="fw-bold mb-3">Septiembre 2025</h5>
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Calendar_icon.svg/768px-Calendar_icon.svg.png" 
+                 alt="Calendario" width="250">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🧾 Sección Calificaciones -->
+    <div id="calificaciones" class="mt-4 d-none">
+      <h3 class="text-danger mb-3">Gestión de Calificaciones</h3>
+      <p>Aquí podrá ingresar y revisar las notas de sus estudiantes.</p>
+      <div class="alert alert-info">Funcionalidad en desarrollo...</div>
+    </div>
+
+    <!-- 📊 Sección Reportes -->
+    <div id="reportes" class="mt-4 d-none">
+      <h3 class="text-danger mb-3">Reportes</h3>
+      <p>Genere reportes consolidados sobre el progreso académico de sus cursos.</p>
+      <div class="alert alert-secondary">Módulo aún no implementado.</div>
+    </div>
+  </div>
+
+  <!-- Script para cambiar pestañas -->
+  <script>
+    function mostrarSeccion(seccion) {
+      const secciones = ['cronogramas', 'calificaciones', 'reportes'];
+      secciones.forEach(id => {
+        document.getElementById(id).classList.add('d-none');
+        document.getElementById('tab-' + id).classList.remove('active');
+      });
+      document.getElementById(seccion).classList.remove('d-none');
+      document.getElementById('tab-' + seccion).classList.add('active');
+    }
+
+    function cerrarSesion() {
+      window.location.href = '../index.html';
+    }
+  </script>
+
+</body>
+</html>
