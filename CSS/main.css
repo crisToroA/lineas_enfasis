@@ -36,7 +36,7 @@ body {
 /* Sección derecha - Imagen */
 .right-section {
     flex: 1;
-    background-image: url('https://images.unsplash.com/photo-1562774053-701939374585?w=1200');
+    background-image: url(https://estudiantes.udemedellin.edu.co/wp-content/uploads/2022/08/prometeo.jpg);
     background-size: cover;
     background-position: center;
 }
