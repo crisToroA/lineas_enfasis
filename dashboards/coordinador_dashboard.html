@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión Académica - Universidad de Medellín</title>
+    <link rel="stylesheet" href="../CSS/coordinador_dashboard.css">
+
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <img src="../IMG/logo.png" alt="Universidad de Medellín">
+          <div class = "button">
+            <button onclick="cerrarSesion()">Cerrar Sesión</button>
+          </div>  
+      </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Page Title -->
+        <h1 class="page-title">
+            Gestión Académica de Líneas de Énfasis
+            <img src="https://previews.123rf.com/images/michaeljung/michaeljung0906/michaeljung090600290/5125275-teacher.jpg" alt="Icon" class="title-icon">
+        </h1>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showSection('registrar')">Registrar Curso</button>
+            <button class="nav-tab" onclick="showSection('validar')">Validar Solicitudes</button>
+            <button class="nav-tab" onclick="showSection('seguimiento')">Seguimiento Aprobaciones</button>
+        </div>
+
+        <!-- Registrar Curso Section -->
+        <div id="registrar" class="content-section active">
+            <div class="card">
+                <h2 class="section-title">Registrar Nuevo Curso</h2>
+                <form>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Nombre del Curso</label>
+                            <input type="text" placeholder="Ej: Cálculo Diferencial">
+                        </div>
+                        <div class="form-group">
+                            <label>Código del Curso</label>
+                            <input type="text" placeholder="Ej: MAT101">
+                        </div>
+                        <div class="form-group">
+                            <label>Semestre</label>
+                            <select>
+                                <option>2024-1</option>
+                                <option>2024-2</option>
+                                <option>2025-1</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-submit">Registrar Curso</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Validar Solicitudes Section -->
+        <div id="validar" class="content-section">
+            <div class="card">
+                <h2 class="section-title">Validación de Solicitudes</h2>
+                <div class="table-container">
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Seguimiento Aprobaciones Section -->
+        <div id="seguimiento" class="content-section">
+            <div class="filter-group">
+                <label>Filtrar por Semestre:</label>
+                <select>
+                    <option>2024-1</option>
+                    <option>2024-2</option>
+                    <option>2025-1</option>
+                </select>
+            </div>
+
+            <div class="seguimiento-container">
+                <!-- Lista de Solicitudes -->
+                <div class="solicitudes-list">
+                    <h2 class="section-title">Listado de Solicitudes</h2>
+                    
+                    
+                </div>
+
+
+                
+
+    <script>
+        function showSection(sectionId) {
+            // Hide all sections
+            var sections = document.querySelectorAll('.content-section');
+            sections.forEach(function(section) {
+                section.classList.remove('active');
+            });
+
+            // Remove active class from all tabs
+            var tabs = document.querySelectorAll('.nav-tab');
+            tabs.forEach(function(tab) {
+                tab.classList.remove('active');
+            });
+
+            // Show selected section
+            document.getElementById(sectionId).classList.add('active');
+
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
