@@ -1,3 +1,36 @@
+.header {
+    background-color: #c8102e;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header img {
+    height: 40px;
+}
+
+.button {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.button button {
+    background: white;
+    color: #000000;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.3s;
+}
+
+.button button:hover {
+    background-color: #f0f0f0;
+}
+
 body {
   font-family: 'Segoe UI', sans-serif;
   color: #333;
