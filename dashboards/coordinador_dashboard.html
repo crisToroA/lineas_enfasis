@@ -35,7 +35,7 @@
         <div id="registrar" class="content-section active">
             <div class="card">
                 <h2 class="section-title">Registrar Nuevo Curso</h2>
-                <form>
+                <form id="registroCursoForm">
                     <div class="form-grid">
                         <div class="form-group">
                             <label>Nombre del Curso</label>
@@ -63,8 +63,8 @@
         <div id="validar" class="content-section">
             <div class="card">
                 <h2 class="section-title">Validación de Solicitudes</h2>
-                <div class="table-container">
-
+                <div class="table-container" id="solicitudesPendientes">
+                    <!-- Las solicitudes se cargarán dinámicamente aquí -->
                 </div>
             </div>
         </div>
@@ -111,6 +111,79 @@
             // Add active class to clicked tab
             event.target.classList.add('active');
         }
+
+        // Función para registrar curso
+        document.getElementById('registroCursoForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            formData.append('action', 'registrar_curso');
+
+            fetch('../api/coordinador_actions.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    alert('Curso registrado exitosamente');
+                    this.reset();
+                }
+            });
+        });
+
+        // Función para cargar solicitudes
+        function cargarSolicitudes() {
+            fetch('../api/coordinador_actions.php?action=obtener_solicitudes')
+            .then(response => response.json())
+            .then(solicitudes => {
+                const container = document.getElementById('solicitudesPendientes');
+                container.innerHTML = solicitudes.map(solicitud => `
+                    <div class="solicitud-card">
+                        <h3>${solicitud.titulo}</h3>
+                        <p>${solicitud.descripcion}</p>
+                        <div class="acciones">
+                            <button onclick="procesarSolicitud(${solicitud.id}, 'aprobada')">Aprobar</button>
+                            <button onclick="procesarSolicitud(${solicitud.id}, 'rechazada')">Rechazar</button>
+                        </div>
+                    </div>
+                `).join('');
+            });
+        }
+
+        // Función para procesar solicitud
+        function procesarSolicitud(id, estado) {
+            const formData = new FormData();
+            formData.append('action', 'validar_solicitud');
+            formData.append('solicitud_id', id);
+            formData.append('estado', estado);
+
+            fetch('../api/coordinador_actions.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    alert('Solicitud procesada exitosamente');
+                    cargarSolicitudes();
+                }
+            });
+        }
+
+        // Función para cerrar sesión
+        function cerrarSesion() {
+            fetch('../api/logout.php')
+            .then(() => {
+                window.location.href = '../index.html';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al cerrar sesión');
+            });
+        }
+
+        // Cargar solicitudes al iniciar
+        cargarSolicitudes();
     </script>
 </body>
 </html>
