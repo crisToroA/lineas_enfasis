@@ -64,26 +64,25 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     document.getElementById('loginForm').addEventListener('submit', function(e) {
-        e.preventDefault();
+        e.preventDefault(); // Evita recargar la página
 
-        const formData = new FormData(this);
+        const rol = document.getElementById('rol').value;
+        const documento = document.getElementById('documento').value.trim();
+        const password = document.getElementById('password').value.trim();
 
-        fetch('api/auth.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                window.location.href = data.redirect;
-            } else {
-                alert(data.message || 'Error al iniciar sesión');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error al conectar con el servidor');
-        });
+        if (!rol || !documento || !password) {
+            alert('Por favor, completa todos los campos.');
+            return;
+        }
+
+        // Redirige según el rol
+        if (rol === 'profesor') {
+            window.location.href = 'dashboards/teacher_dashboard.html';
+        } else if (rol === 'estudiante') {
+           window.location.href = 'dashboards/explorar_LE_estudiante.html';
+        }else if (rol === 'coordinador') {
+           window.location.href = 'dashboards/coordinador_dashboard.html';
+        }
     });
     </script>
 </body>
