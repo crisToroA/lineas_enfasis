@@ -9,14 +9,12 @@
 </head>
 <body>
     <!-- Header -->
-    <header class="header">
-        <div class="header-content">
-            <img src="../IMG/descarga.jpg" alt="Universidad de Medellín" class="logo">
-            <div class="search-container">
-                <input type="text" class="search-input" placeholder="Buscar líneas de énfasis por tema...">
-            </div>
-        </div>
-    </header>
+    <div class="header">
+        <img src="../IMG/logo.png" alt="Universidad de Medellín">
+        <div class = "button">
+            <button onclick="cerrarSesion()">Cerrar Sesión</button>
+        </div>  
+    </div>
 
     <div class="container-fluid">
         <div class="row">
@@ -56,11 +54,6 @@
                         <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=400" alt="Estudiantes">
                     </div>
                 </section>
-
-                <!-- Filter Section -->
-                <div class="filter-section">
-                    <input type="text" class="filter-input" placeholder="Filtrar por nombre o programa...">
-                </div>
 
                 <!-- Cards Grid -->
                 <div class="cards-grid">
@@ -134,24 +127,11 @@
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-content">
-            <div class="footer-links">
-                <a href="#universidad">Universidad</a>
-                <a href="#recursos">Recursos</a>
-                <a href="#contacto">Contacto</a>
-            </div>
-            <div class="social-links">
-                <a href="#" aria-label="Facebook">f</a>
-                <a href="#" aria-label="Twitter">t</a>
-                <a href="#" aria-label="Instagram">ig</a>
-                <a href="#" aria-label="LinkedIn">in</a>
-                <a href="#" aria-label="YouTube">yt</a>
-            </div>
-        </div>
-    </footer>
-
+    <script>
+      function cerrarSesion() {
+      window.location.href = '../index.html';
+    }  
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
