@@ -63,27 +63,44 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-    document.getElementById('loginForm').addEventListener('submit', function(e) {
-        e.preventDefault(); // Evita recargar la página
+document.getElementById('loginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
 
-        const rol = document.getElementById('rol').value;
-        const documento = document.getElementById('documento').value.trim();
-        const password = document.getElementById('password').value.trim();
+    const rol = document.getElementById('rol').value;
+    const documento = document.getElementById('documento').value.trim();
+    const password = document.getElementById('password').value.trim();
 
-        if (!rol || !documento || !password) {
-            alert('Por favor, completa todos los campos.');
-            return;
+    if (!rol || !documento || !password) {
+        alert('Por favor, completa todos los campos.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('rol', rol);
+    formData.append('documento', documento);
+    formData.append('password', password);
+
+    fetch('PHP/login.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            if (data.rol === 'profesor') {
+                window.location.href = 'dashboards/teacher_dashboard.html';
+            } else if (data.rol === 'estudiante') {
+                window.location.href = 'dashboards/explorar_LE_estudiante.html';
+            } else if (data.rol === 'coordinador') {
+                window.location.href = 'dashboards/coordinador_dashboard.html';
+            }
+        } else {
+            alert('Credenciales incorrectas. Verifica tus datos.');
         }
+    })
+    .catch(err => console.error('Error:', err));
+});
+</script>
 
-        // Redirige según el rol
-        if (rol === 'profesor') {
-            window.location.href = 'dashboards/teacher_dashboard.html';
-        } else if (rol === 'estudiante') {
-           window.location.href = 'dashboards/explorar_LE_estudiante.html';
-        }else if (rol === 'coordinador') {
-           window.location.href = 'dashboards/coordinador_dashboard.html';
-        }
-    });
-    </script>
 </body>
 </html>
