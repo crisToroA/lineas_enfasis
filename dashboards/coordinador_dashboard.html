@@ -198,32 +198,45 @@
 		</div>
 	</div>
 
-	<!-- Modal detalle / validación -->
-	<div id="modalDetalleSolicitud" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:9999;">
-		<div style="background:white;border-radius:8px;padding:20px;max-width:800px;width:95%;max-height:90vh;overflow:auto;position:relative;">
-			<button onclick="cerrarModalDetalle()" style="position:absolute;right:12px;top:12px;background:#eee;border:none;padding:8px;border-radius:6px;cursor:pointer;">Cerrar</button>
-			<h3>Detalle de Solicitud</h3>
-			<p><b>Tipo:</b> <span id="detalleTipo">-</span></p>
-			<p><b>Remitente:</b> <span id="detalleRemitente">-</span></p>
-			<p><b>Rol:</b> <span id="detalleRol">-</span></p>
-			<p><b>Fecha envío:</b> <span id="detalleFecha">-</span></p>
-			<p><b>Estado:</b> <span id="detalleEstado">-</span></p>
-			<p><b>Descripción (remitente):</b></p>
-			<p id="detalleDescripcion">-</p>
-
-			<!-- Comentario del coordinador (si ya hay) -->
-			<div id="detalleComentarioExistente" style="margin-top:10px;display:none;">
-				<p><b>Comentario del coordinador:</b></p>
-				<p id="detalleComentarioCoordinador">-</p>
+	<!-- Modal detalle / validación (reemplazado por versión con vistas) -->
+	<div id="modalDetalleSolicitud" class="modal-overlay" style="display:none;">
+		<div class="modal-card">
+			<div class="modal-header">
+				<button id="modalBack" class="modal-back" title="Volver" style="display:none;">←</button>
+				<h3 id="modalTitle" style="margin:0;">Detalle de Solicitud</h3>
+				<button onclick="cerrarModalDetalle()" class="modal-close" title="Cerrar">✕</button>
 			</div>
 
-			<!-- Área para dejar comentario al procesar (solo cuando está pendiente) -->
-			<div id="detalleAcciones" style="margin-top:16px;display:none;">
-				<label for="coordinatorComment"><b>Comentario para el remitente (requerido)</b></label>
-				<textarea id="coordinatorComment" style="width:100%;min-height:100px;padding:8px;margin-top:8px;border:1px solid #ddd;border-radius:6px;"></textarea>
-				<div style="display:flex;gap:10px;margin-top:12px;">
-					<button id="btnAprobar" class="btn-action btn-aprobar" style="padding:8px 16px;">Aprobar</button>
-					<button id="btnRechazar" class="btn-action btn-rechazar" style="padding:8px 16px;">Rechazar</button>
+			<!-- Vista: Detalles -->
+			<div id="modalDetails" class="modal-body">
+				<p><b>Tipo:</b> <span id="detalleTipo">-</span></p>
+				<p><b>Remitente:</b> <span id="detalleRemitente">-</span></p>
+				<p><b>Rol:</b> <span id="detalleRol">-</span></p>
+				<p><b>Fecha envío:</b> <span id="detalleFecha">-</span></p>
+				<p><b>Estado:</b> <span id="detalleEstado">-</span></p>
+				<p><b>Descripción (remitente):</b></p>
+				<p id="detalleDescripcion">-</p>
+
+				<div id="detalleComentarioExistente" style="margin-top:10px;display:none;">
+					<p><b>Comentario del coordinador:</b></p>
+					<p id="detalleComentarioCoordinador">-</p>
+				</div>
+
+				<div style="display:flex;gap:12px;margin-top:16px;">
+					<button id="btnAprobar" class="btn-action btn-aprobar">Aprobar</button>
+					<button id="btnRechazar" class="btn-action btn-rechazar">Rechazar</button>
+				</div>
+			</div>
+
+			<!-- Vista: Acción (comentar y enviar) -->
+			<div id="modalAction" class="modal-body" style="display:none;">
+				<p style="margin-top:0;"><b>Acción:</b> <span id="accionTipo">-</span></p>
+				<label for="actionComment"><b>Comentario obligatorio:</b></label>
+				<textarea id="actionComment" style="width:100%;min-height:140px;padding:8px;margin-top:8px;border:1px solid #ddd;border-radius:6px;"></textarea>
+
+				<div style="display:flex;gap:12px;margin-top:12px;">
+					<button id="submitActionBtn" class="btn-action btn-aprobar action-submit">Enviar y Aprobar</button>
+					<button id="cancelActionBtn" class="btn-action btn-rechazar action-cancel">Cancelar</button>
 				</div>
 			</div>
 		</div>
@@ -326,11 +339,14 @@
             });
         }
 
-        // Mostrar modal con detalle de solicitud
+        // Mostrar modal con detalle de solicitud (actualizado)
     function verDetalleSolicitud(id) {
         fetch(`../php/coordinador_actions.php?action=detalle_solicitud&id=${id}`)
         .then(res => res.json())
         .then(data => {
+            _currentSolicitudId = data.id ?? id;
+            _currentAccion = null;
+            // Llenar campos de detalle
             document.getElementById('detalleTipo').textContent = data.tipo || '-';
             document.getElementById('detalleRemitente').textContent = data.remitente || '-';
             document.getElementById('detalleRol').textContent = data.rol || '-';
@@ -338,7 +354,7 @@
             document.getElementById('detalleEstado').textContent = (data.estado ? data.estado.charAt(0).toUpperCase() + data.estado.slice(1) : '-');
             document.getElementById('detalleDescripcion').textContent = data.descripcion || '(Sin detalles)';
 
-            // Comentario del coordinador (si existe)
+            // Comentario existente
             if (data.comentario_coordinador && data.comentario_coordinador.trim() !== '') {
                 document.getElementById('detalleComentarioExistente').style.display = 'block';
                 document.getElementById('detalleComentarioCoordinador').textContent = data.comentario_coordinador;
@@ -347,294 +363,100 @@
                 document.getElementById('detalleComentarioCoordinador').textContent = '-';
             }
 
-            // Mostrar/ocultar botones según estado
-            if (data.estado === 'pendiente') {
-                document.getElementById('detalleAcciones').style.display = 'block';
-                document.getElementById('coordinatorComment').value = '';
-                document.getElementById('btnAprobar').onclick = function() { procesarSolicitud(data.id, 'aprobada'); };
-                document.getElementById('btnRechazar').onclick = function() { procesarSolicitud(data.id, 'rechazada'); };
-            } else {
-                document.getElementById('detalleAcciones').style.display = 'none';
-            }
+            // asegurar vista detalles visible y acción oculta
+            document.getElementById('modalDetails').style.display = 'block';
+            document.getElementById('modalAction').style.display = 'none';
+            document.getElementById('modalBack').style.display = 'none';
+            document.getElementById('actionComment').value = '';
 
-            // Mostrar modal y limpiar posibles campos
+            // conectar botones para iniciar acción
+            document.getElementById('btnAprobar').onclick = () => startAccion('aprobada');
+            document.getElementById('btnRechazar').onclick = () => startAccion('rechazada');
+
+            // abrir modal
             document.getElementById('modalDetalleSolicitud').style.display = 'flex';
+        })
+        .catch(err => {
+            console.error('Error detalle solicitud', err);
+            alert('Error al cargar detalle de la solicitud.');
         });
     }
 
-    function cerrarModalDetalle() {
-        document.getElementById('modalDetalleSolicitud').style.display = 'none';
-    }
+    // iniciar flujo de acción: mostrar formulario de comentario
+    function startAccion(estado) {
+        _currentAccion = estado;
+        // actualizar UI de acción
+        document.getElementById('accionTipo').textContent = estado === 'aprobada' ? 'Aprobar' : 'Rechazar';
+        document.getElementById('modalDetails').style.display = 'none';
+        document.getElementById('modalAction').style.display = 'block';
+        document.getElementById('modalBack').style.display = 'inline-block';
+        // cambiar texto del botón de envío según acción
+        const submitBtn = document.getElementById('submitActionBtn');
+        submitBtn.textContent = (estado === 'aprobada') ? 'Enviar y Aprobar' : 'Enviar y Rechazar';
+    };
 
-    // Procesar solicitud (aprobar/rechazar) con comentario
-    function procesarSolicitud(id, estado) {
-        const comentario = document.getElementById('coordinatorComment').value.trim();
+    // volver desde vista acción a detalles
+    document.getElementById('modalBack').addEventListener('click', () => {
+        document.getElementById('modalAction').style.display = 'none';
+        document.getElementById('modalDetails').style.display = 'block';
+        document.getElementById('modalBack').style.display = 'none';
+    });
+
+    // cancelar acción (botón)
+    document.getElementById('cancelActionBtn').addEventListener('click', () => {
+        document.getElementById('actionComment').value = '';
+        document.getElementById('modalAction').style.display = 'none';
+        document.getElementById('modalDetails').style.display = 'block';
+        document.getElementById('modalBack').style.display = 'none';
+    });
+
+    // envío final de la acción con comentario
+    document.getElementById('submitActionBtn').addEventListener('click', () => {
+        const comentario = document.getElementById('actionComment').value.trim();
         if (!comentario) {
-            alert('Por favor deje un comentario antes de procesar la solicitud.');
+            alert('Por favor escriba un comentario antes de continuar.');
             return;
         }
-        const formData = new FormData();
-        formData.append('action', 'validar_solicitud');
-        formData.append('solicitud_id', id);
-        formData.append('estado', estado);
-        formData.append('comentario', comentario);
-        // Si se dispone de id de coordinador en frontend, se puede anexar:
-        // formData.append('aprobador_id', 123);
+        if (!_currentSolicitudId || !_currentAccion) {
+            alert('Solicitud o acción inválida.');
+            return;
+        }
+        // llamar a la función que procesa la solicitud (usa POST)
+        const fd = new FormData();
+        fd.append('action', 'validar_solicitud');
+        fd.append('solicitud_id', _currentSolicitudId);
+        fd.append('estado', _currentAccion);
+        fd.append('comentario', comentario);
+        // opcional: fd.append('aprobador_id', CURRENT_USER_ID); // si dispone de sesión
 
         fetch('../php/coordinador_actions.php', {
             method: 'POST',
-            body: formData
+            body: fd
         })
-        .then(response => response.json())
-        .then(data => {
-            if(data.success) {
-                alert('Solicitud procesada exitosamente');
+        .then(r => r.json())
+        .then(resp => {
+            if (resp.success) {
+                mostrarRegistroFeedback('Solicitud procesada exitosamente.', true);
                 cerrarModalDetalle();
                 cargarSolicitudes();
-                cargarSeguimiento(); // actualizar seguimiento
+                cargarSeguimiento();
             } else {
-                alert('Error al procesar la solicitud');
+                mostrarRegistroFeedback('No se pudo procesar la solicitud.', false);
             }
         })
-        .catch(err => {
-            console.error('Error validar solicitud', err);
-            alert('Error al conectar con el servidor.');
+        .catch(() => {
+            mostrarRegistroFeedback('Error al conectar con el servidor.', false);
         });
-    }
+    });
 
-    // Cargar seguimiento (solicitudes aprobadas/rechazadas)
-		function cargarSeguimiento() {
-			fetch('../php/coordinador_actions.php?action=list_solicitudes_procesadas')
-			.then(res => res.json())
-			.then(data => {
-				const cont = document.getElementById('listaSeguimiento');
-				if (!Array.isArray(data) || data.length === 0) {
-					cont.innerHTML = '<p>No hay solicitudes procesadas.</p>';
-					return;
-				}
-				cont.innerHTML = '';
-				data.forEach(s => {
-					const div = document.createElement('div');
-					div.className = 'historial-item';
-					div.style.marginBottom = '12px';
-					div.innerHTML = `
-						<div style="display:flex;justify-content:space-between;align-items:center;">
-							<div>
-								<b>(${s.estado.toUpperCase()})</b> ${s.tipo} — <span style="color:#666">${s.remitente}</span>
-								<div style="font-size:13px;color:#999;margin-top:6px;">Enviado: ${s.fecha} • Procesado: ${s.fecha_procesamiento || '-'}</div>
-							</div>
-							<div style="text-align:right;">
-								<div style="font-size:13px;color:#333;">${s.aprobador_nombre ? s.aprobador_nombre : '—'}</div>
-								<button class="btn-action" style="margin-top:8px;padding:6px 10px;" onclick="verDetalleSolicitud(${s.id})">Ver</button>
-							</div>
-						</div>
-						<div style="margin-top:8px;">
-							<p style="margin:0;"><b>Descripción (remitente):</b></p>
-							<p style="margin:0;color:#444;">${s.descripcion || '(Sin descripción)'}</p>
-							<div style="margin-top:8px;">
-								<p style="margin:0;"><b>Comentario del coordinador:</b></p>
-								<p style="margin:0;color:#444;">${s.comentario_coordinador || '(Sin comentario)'}</p>
-							</div>
-						</div>
-					`;
-					cont.appendChild(div);
-				});
-			})
-			.catch(err => {
-				console.error('Error cargar seguimiento', err);
-				document.getElementById('listaSeguimiento').innerHTML = '<p>Error al cargar seguimiento.</p>';
-			});
-		}
-
-        // Cerrar sesión
-        function cerrarSesion() {
-            fetch('../api/logout.php')
-            .then(() => {
-                window.location.href = '../index.html';
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Error al cerrar sesión');
-            });
-        }
-
-        // Cargar lista de profesores desde el servidor
-		function cargarProfesores() {
-			const select = document.getElementById('profesorSelect');
-			select.innerHTML = '<option value="">Cargando profesores...</option>';
-
-			fetch('../php/coordinador_actions.php?action=list_profesores')
-			.then(res => res.json())
-			.then(data => {
-				if (!Array.isArray(data)) {
-					select.innerHTML = '<option value="">No se encontraron profesores</option>';
-					return;
-				}
-				select.innerHTML = '<option value="">Seleccione un profesor</option>';
-				data.forEach(prof => {
-					const opt = document.createElement('option');
-					opt.value = prof.id;
-					opt.textContent = prof.nombre + ' (' + prof.documento + ')';
-					select.appendChild(opt);
-				});
-			})
-			.catch(err => {
-				console.error('Error cargando profesores', err);
-				select.innerHTML = '<option value="">Error al cargar profesores</option>';
-			});
-		}
-
-        // Cargar líneas de énfasis en ambos selects
-        function cargarLineasEnfasis() {
-            fetch('../php/coordinador_actions.php?action=list_lineas_enfasis')
-            .then(res => res.json())
-            .then(data => {
-                // Para el formulario de registro
-                const selectForm = document.getElementById('lineaEnfasisSelect');
-                selectForm.innerHTML = '<option value="">Seleccione una línea de énfasis</option>';
-                data.forEach(le => {
-                    const opt = document.createElement('option');
-                    opt.value = le.id;
-                    opt.textContent = le.nombre;
-                    selectForm.appendChild(opt);
-                });
-                // Para el filtro
-                const selectFiltro = document.getElementById('filtroLineaEnfasis');
-                selectFiltro.innerHTML = '<option value="">Todas</option>';
-                data.forEach(le => {
-                    const opt = document.createElement('option');
-                    opt.value = le.id;
-                    opt.textContent = le.nombre;
-                    selectFiltro.appendChild(opt);
-                });
-            });
-        }
-
-        // Reemplazado: función cargarCursos ahora renderiza tarjetas y aplica búsqueda local
-        function cargarCursos() {
-            const filtroLinea = document.getElementById('filtroLineaEnfasis').value;
-            let url = '../php/coordinador_actions.php?action=list_cursos';
-            if (filtroLinea) url += '&linea_enfasis_id=' + encodeURIComponent(filtroLinea);
-
-            fetch(url)
-            .then(res => res.json())
-            .then(data => {
-                const cont = document.getElementById('listaCursos');
-                // limpiar
-                cont.innerHTML = '';
-
-                if (!Array.isArray(data) || data.length === 0) {
-                    cont.innerHTML = '<p style="color:#666;">No hay cursos registrados.</p>';
-                    return;
-                }
-
-                data.forEach(curso => {
-                    const card = document.createElement('div');
-                    card.className = 'course-card';
-                    card.innerHTML = `
-                        <div class="course-card-body">
-                            <div class="course-title">${escapeHtml(curso.nombre)}</div>
-                            <div class="course-meta">
-                                <span class="course-code">${escapeHtml(curso.codigo)}</span>
-                                <span class="course-semestre">${escapeHtml(curso.semestre)}</span>
-                                <span class="course-linea">${escapeHtml(curso.linea_enfasis_nombre)}</span>
-                            </div>
-                            <div class="course-prof">Profesor: <b>${escapeHtml(curso.profesor_nombre)}</b></div>
-                        </div>
-                        <div class="course-actions">
-                            <button class="btn-action btn-rechazar" onclick="eliminarCurso(${curso.id}, this)">Eliminar</button>
-                        </div>
-                    `;
-                    cont.appendChild(card);
-                });
-
-                // aplicar filtro de búsqueda local si hay texto
-                aplicarFiltroBusqueda();
-            })
-            .catch(err => {
-                console.error('Error cargar cursos', err);
-                document.getElementById('listaCursos').innerHTML = '<p style="color:#c00;">Error al cargar los cursos.</p>';
-            });
-        }
-
-        // Util: escapar texto para evitar inyección en HTML
-        function escapeHtml(text) {
-            if (!text && text !== 0) return '';
-            return String(text)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-        }
-
-        // Buscar en cliente
-        document.getElementById('buscarCurso').addEventListener('input', aplicarFiltroBusqueda);
-
-        function aplicarFiltroBusqueda() {
-            const q = document.getElementById('buscarCurso').value.trim().toLowerCase();
-            const cont = document.getElementById('listaCursos');
-            Array.from(cont.children).forEach(card => {
-                const texto = card.innerText.toLowerCase();
-                card.style.display = q === '' || texto.indexOf(q) !== -1 ? 'flex' : 'none';
-            });
-        }
-
-        // Ajustar eliminarCurso para mostrar feedback dentro del UI (y recibir botón)
-        function eliminarCurso(id, btn) {
-            if (!confirm('¿Seguro que deseas eliminar este curso?')) return;
-            const formData = new FormData();
-            formData.append('action', 'eliminar_curso');
-            formData.append('curso_id', id);
-
-            // pequeño indicador
-            const original = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerText = 'Eliminando...';
-
-            fetch('../php/coordinador_actions.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(resp => {
-                if (resp.success) {
-                    // mostrar feedback temporal
-                    mostrarRegistroFeedback('Curso eliminado correctamente.', true);
-                    // recargar lista
-                    cargarCursos();
-                } else {
-                    mostrarRegistroFeedback('No se pudo eliminar el curso.', false);
-                    btn.disabled = false;
-                    btn.innerHTML = original;
-                }
-            })
-            .catch(() => {
-                mostrarRegistroFeedback('Error al conectar con el servidor.', false);
-                btn.disabled = false;
-                btn.innerHTML = original;
-            });
-        }
-
-        // Mostrar feedback en el panel de registro (usa el div registroFeedback si existe)
-        function mostrarRegistroFeedback(text, ok) {
-            const fb = document.getElementById('registroFeedback');
-            if (!fb) {
-                alert(text);
-                return;
-            }
-            fb.style.display = 'block';
-            fb.style.color = ok ? '#155724' : '#721c24';
-            fb.style.background = ok ? '#e6f4ea' : '#fdecea';
-            fb.style.borderColor = ok ? '#c8e6d6' : '#f5c6cb';
-            fb.textContent = text;
-            setTimeout(() => { fb.style.display = 'none'; }, 3000);
-        }
-
-        // Escuchar cambio de filtro de línea para recargar
-        document.getElementById('filtroLineaEnfasis').addEventListener('change', function() {
-            cargarCursos();
-        });
+    // cerrar modal y limpiar estados
+    function cerrarModalDetalle() {
+        document.getElementById('modalDetalleSolicitud').style.display = 'none';
+        _currentSolicitudId = null;
+        _currentAccion = null;
+        document.getElementById('actionComment').value = '';
+        document.getElementById('modalBack').style.display = 'none';
+}
 
         // Cargar solicitudes, profesores y líneas de énfasis al iniciar
 		cargarSolicitudes();
