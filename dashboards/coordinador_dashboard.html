@@ -34,20 +34,29 @@
 
         <!-- Registrar Curso Section -->
         <div id="registrar" class="content-section active">
-            <div class="card">
-                <h2 class="section-title">Registrar Nuevo Curso</h2>
-                <form id="registroCursoForm">
+            <!-- Reemplazado: tarjeta de registro con diseño mejorado -->
+            <div class="card card--elevated">
+                <div class="card-header">
+                    <h2 class="section-title">Registrar Nuevo Curso</h2>
+                    <p class="card-subtitle">Complete la información del curso. El comentario del profesor es opcional.</p>
+                </div>
+
+                <form id="registroCursoForm" class="registro-form">
                     <div class="form-grid">
                         <div class="form-group">
-                            <label>Nombre del Curso</label>
+                            <label><span class="label-icon">📘</span> Nombre del Curso</label>
                             <input type="text" id="curso_nombre" name="nombre" placeholder="Ej: Cálculo Diferencial" required>
+                            <div class="helper-text">Nombre descriptivo y claro (máx. 150 caracteres).</div>
                         </div>
+
                         <div class="form-group">
-                            <label>Código del Curso</label>
+                            <label><span class="label-icon">🔖</span> Código del Curso</label>
                             <input type="text" id="curso_codigo" name="codigo" placeholder="Ej: MAT101" required>
+                            <div class="helper-text">Código único (sin espacios).</div>
                         </div>
+
                         <div class="form-group">
-                            <label>Semestre</label>
+                            <label><span class="label-icon">📅</span> Semestre</label>
                             <select id="curso_semestre" name="semestre" required>
                                 <option value="">Seleccione...</option>
                                 <option>2024-1</option>
@@ -56,35 +65,55 @@
                             </select>
                         </div>
 
-                        <!-- Nuevo: selector de profesor relacionado -->
                         <div class="form-group">
-                            <label>Profesor responsable</label>
+                            <label><span class="label-icon">👩‍🏫</span> Profesor responsable</label>
                             <select id="profesorSelect" name="profesor_id" required>
                                 <option value="">Cargando profesores...</option>
                             </select>
+                            <div class="helper-text">Seleccione el docente que dictará el curso.</div>
                         </div>
 
-                        <!-- Nuevo: selector de línea de énfasis -->
                         <div class="form-group">
-                            <label>Línea de Énfasis</label>
+                            <label><span class="label-icon">📚</span> Línea de Énfasis</label>
                             <select id="lineaEnfasisSelect" name="linea_enfasis_id" required>
                                 <option value="">Cargando líneas de énfasis...</option>
                             </select>
                         </div>
+
+                        <div class="form-group">
+                            <label><span class="label-icon">📝</span> Notas/Observaciones (opcional)</label>
+                            <input type="text" id="curso_observaciones" name="observaciones" placeholder="Ej: Requiere laboratorio complementario">
+                        </div>
                     </div>
-                    <button type="submit" class="btn-submit">Registrar Curso</button>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn-submit">Registrar Curso</button>
+                        <div id="registroFeedback" class="feedback" aria-live="polite" style="display:none;"></div>
+                    </div>
                 </form>
             </div>
-            <!-- Nuevo: Filtro por línea de énfasis -->
+            <!-- Nuevo: Filtro por línea de énfasis + lista de cursos (tarjetas) -->
             <div class="card" style="margin-top:30px;">
-                <h2 class="section-title">Cursos Registrados</h2>
-                <div style="margin-bottom:16px;">
-                    <label for="filtroLineaEnfasis"><b>Filtrar por Línea de Énfasis:</b></label>
-                    <select id="filtroLineaEnfasis">
-                        <option value="">Todas</option>
-                    </select>
+                <div class="card-header" style="display:flex;flex-direction:column;gap:12px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <h2 class="section-title" style="margin:0;">Cursos Registrados</h2>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input id="buscarCurso" type="text" placeholder="Buscar por nombre o código..." style="padding:10px 12px;border-radius:8px;border:1px solid #e6e6e6;width:260px;">
+                            <label for="filtroLineaEnfasis" style="margin:0 6px 0 0;font-weight:600;color:#333;">Línea:</label>
+                            <select id="filtroLineaEnfasis" style="padding:10px;border-radius:8px;border:1px solid #e6e6e6;">
+                                <option value="">Todas</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="card-subtitle" style="margin:0;color:#666;font-size:13px;">Busca, filtra y administra los cursos registrados. Haz click en eliminar para borrarlo.</p>
                 </div>
-                <div class="table-container">
+
+                <div id="listaCursos" class="courses-grid" style="margin-top:18px;">
+                    <!-- Se generan tarjetas de curso dinámicamente -->
+                </div>
+
+                <!-- Tabla de respaldo (oculta) para compatibilidad -->
+                <div class="table-container" style="display:none;">
                     <table id="tablaCursos">
                         <thead>
                             <tr>
@@ -481,7 +510,7 @@
             });
         }
 
-        // Cargar cursos registrados with filter
+        // Reemplazado: función cargarCursos ahora renderiza tarjetas y aplica búsqueda local
         function cargarCursos() {
             const filtroLinea = document.getElementById('filtroLineaEnfasis').value;
             let url = '../php/coordinador_actions.php?action=list_cursos';
@@ -489,36 +518,79 @@
 
             fetch(url)
             .then(res => res.json())
-            .then data => {
-                const tbody = document.querySelector('#tablaCursos tbody');
+            .then(data => {
+                const cont = document.getElementById('listaCursos');
+                // limpiar
+                cont.innerHTML = '';
+
                 if (!Array.isArray(data) || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6">No hay cursos registrados.</td></tr>';
+                    cont.innerHTML = '<p style="color:#666;">No hay cursos registrados.</p>';
                     return;
                 }
-                tbody.innerHTML = '';
+
                 data.forEach(curso => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${curso.nombre}</td>
-                        <td>${curso.codigo}</td>
-                        <td>${curso.semestre}</td>
-                        <td>${curso.linea_enfasis_nombre}</td>
-                        <td>${curso.profesor_nombre}</td>
-                        <td>
-                            <button onclick="eliminarCurso(${curso.id})" class="btn-action btn-rechazar" style="padding:4px 12px;">Eliminar</button>
-                        </td>
+                    const card = document.createElement('div');
+                    card.className = 'course-card';
+                    card.innerHTML = `
+                        <div class="course-card-body">
+                            <div class="course-title">${escapeHtml(curso.nombre)}</div>
+                            <div class="course-meta">
+                                <span class="course-code">${escapeHtml(curso.codigo)}</span>
+                                <span class="course-semestre">${escapeHtml(curso.semestre)}</span>
+                                <span class="course-linea">${escapeHtml(curso.linea_enfasis_nombre)}</span>
+                            </div>
+                            <div class="course-prof">Profesor: <b>${escapeHtml(curso.profesor_nombre)}</b></div>
+                        </div>
+                        <div class="course-actions">
+                            <button class="btn-action btn-rechazar" onclick="eliminarCurso(${curso.id}, this)">Eliminar</button>
+                        </div>
                     `;
-                    tbody.appendChild(tr);
+                    cont.appendChild(card);
                 });
+
+                // aplicar filtro de búsqueda local si hay texto
+                aplicarFiltroBusqueda();
+            })
+            .catch(err => {
+                console.error('Error cargar cursos', err);
+                document.getElementById('listaCursos').innerHTML = '<p style="color:#c00;">Error al cargar los cursos.</p>';
             });
         }
 
-        // Eliminar curso
-        function eliminarCurso(id) {
+        // Util: escapar texto para evitar inyección en HTML
+        function escapeHtml(text) {
+            if (!text && text !== 0) return '';
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // Buscar en cliente
+        document.getElementById('buscarCurso').addEventListener('input', aplicarFiltroBusqueda);
+
+        function aplicarFiltroBusqueda() {
+            const q = document.getElementById('buscarCurso').value.trim().toLowerCase();
+            const cont = document.getElementById('listaCursos');
+            Array.from(cont.children).forEach(card => {
+                const texto = card.innerText.toLowerCase();
+                card.style.display = q === '' || texto.indexOf(q) !== -1 ? 'flex' : 'none';
+            });
+        }
+
+        // Ajustar eliminarCurso para mostrar feedback dentro del UI (y recibir botón)
+        function eliminarCurso(id, btn) {
             if (!confirm('¿Seguro que deseas eliminar este curso?')) return;
             const formData = new FormData();
             formData.append('action', 'eliminar_curso');
             formData.append('curso_id', id);
+
+            // pequeño indicador
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerText = 'Eliminando...';
 
             fetch('../php/coordinador_actions.php', {
                 method: 'POST',
@@ -527,16 +599,42 @@
             .then(res => res.json())
             .then(resp => {
                 if (resp.success) {
-                    alert('Curso eliminado.');
+                    // mostrar feedback temporal
+                    mostrarRegistroFeedback('Curso eliminado correctamente.', true);
+                    // recargar lista
                     cargarCursos();
                 } else {
-                    alert('No se pudo eliminar el curso.');
+                    mostrarRegistroFeedback('No se pudo eliminar el curso.', false);
+                    btn.disabled = false;
+                    btn.innerHTML = original;
                 }
+            })
+            .catch(() => {
+                mostrarRegistroFeedback('Error al conectar con el servidor.', false);
+                btn.disabled = false;
+                btn.innerHTML = original;
             });
         }
 
-        // Recargar cursos al cambiar filtro
-        document.getElementById('filtroLineaEnfasis').addEventListener('change', cargarCursos);
+        // Mostrar feedback en el panel de registro (usa el div registroFeedback si existe)
+        function mostrarRegistroFeedback(text, ok) {
+            const fb = document.getElementById('registroFeedback');
+            if (!fb) {
+                alert(text);
+                return;
+            }
+            fb.style.display = 'block';
+            fb.style.color = ok ? '#155724' : '#721c24';
+            fb.style.background = ok ? '#e6f4ea' : '#fdecea';
+            fb.style.borderColor = ok ? '#c8e6d6' : '#f5c6cb';
+            fb.textContent = text;
+            setTimeout(() => { fb.style.display = 'none'; }, 3000);
+        }
+
+        // Escuchar cambio de filtro de línea para recargar
+        document.getElementById('filtroLineaEnfasis').addEventListener('change', function() {
+            cargarCursos();
+        });
 
         // Cargar solicitudes, profesores y líneas de énfasis al iniciar
 		cargarSolicitudes();
