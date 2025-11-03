@@ -108,7 +108,22 @@
             <div class="card">
                 <h2 class="section-title">Validación de Solicitudes</h2>
                 <div class="table-container" id="solicitudesPendientes">
-                    <!-- Las solicitudes se cargarán dinámicamente aquí -->
+                    <table id="tablaSolicitudes" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Remitente</th>
+                                <th>Rol</th>
+                                <th>Tipo</th>
+                                <th>Fecha</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se carga dinámicamente -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -198,46 +213,90 @@
             });
         });
 
-        // Función para cargar solicitudes
+        // Cargar solicitudes en tabla
         function cargarSolicitudes() {
-            fetch('../api/coordinador_actions.php?action=obtener_solicitudes')
+            fetch('../php/coordinador_actions.php?action=obtener_solicitudes')
             .then(response => response.json())
             .then(solicitudes => {
-                const container = document.getElementById('solicitudesPendientes');
-                container.innerHTML = solicitudes.map(solicitud => `
-                    <div class="solicitud-card">
-                        <h3>${solicitud.titulo}</h3>
-                        <p>${solicitud.descripcion}</p>
-                        <div class="acciones">
-                            <button onclick="procesarSolicitud(${solicitud.id}, 'aprobada')">Aprobar</button>
-                            <button onclick="procesarSolicitud(${solicitud.id}, 'rechazada')">Rechazar</button>
-                        </div>
-                    </div>
-                `).join('');
-            });
-        }
-
-        // Función para procesar solicitud
-        function procesarSolicitud(id, estado) {
-            const formData = new FormData();
-            formData.append('action', 'validar_solicitud');
-            formData.append('solicitud_id', id);
-            formData.append('estado', estado);
-
-            fetch('../api/coordinador_actions.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if(data.success) {
-                    alert('Solicitud procesada exitosamente');
-                    cargarSolicitudes();
+                const tbody = document.querySelector('#tablaSolicitudes tbody');
+                if (!Array.isArray(solicitudes) || solicitudes.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7">No hay solicitudes registradas.</td></tr>';
+                    return;
                 }
+                tbody.innerHTML = '';
+                solicitudes.forEach(solicitud => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${solicitud.id}</td>
+                        <td>${solicitud.remitente}</td>
+                        <td>${solicitud.rol}</td>
+                        <td>${solicitud.tipo}</td>
+                        <td>${solicitud.fecha}</td>
+                        <td>
+                            <span class="status-badge status-${solicitud.estado}">${solicitud.estado.charAt(0).toUpperCase() + solicitud.estado.slice(1)}</span>
+                        </td>
+                        <td>
+                            <button class="btn-action" style="padding:4px 12px;" onclick="verDetalleSolicitud(${solicitud.id})">Ver</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(() => {
+                document.querySelector('#tablaSolicitudes tbody').innerHTML = '<tr><td colspan="7">Error al cargar las solicitudes.</td></tr>';
             });
         }
 
-        // Función para cerrar sesión
+        // Mostrar modal con detalle de solicitud
+    function verDetalleSolicitud(id) {
+        fetch(`../php/coordinador_actions.php?action=detalle_solicitud&id=${id}`)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('detalleTipo').textContent = data.tipo;
+            document.getElementById('detalleRemitente').textContent = data.remitente;
+            document.getElementById('detalleRol').textContent = data.rol;
+            document.getElementById('detalleFecha').textContent = data.fecha;
+            document.getElementById('detalleEstado').textContent = data.estado.charAt(0).toUpperCase() + data.estado.slice(1);
+            document.getElementById('detalleDescripcion').textContent = data.descripcion || '(Sin detalles)';
+            document.getElementById('modalDetalleSolicitud').style.display = 'flex';
+
+            // Mostrar/ocultar botones según estado
+            if (data.estado === 'pendiente') {
+                document.getElementById('detalleAcciones').style.display = 'flex';
+                document.getElementById('btnAprobar').onclick = function() { procesarSolicitud(data.id, 'aprobada'); };
+                document.getElementById('btnRechazar').onclick = function() { procesarSolicitud(data.id, 'rechazada'); };
+            } else {
+                document.getElementById('detalleAcciones').style.display = 'none';
+            }
+        });
+    }
+
+    function cerrarModalDetalle() {
+        document.getElementById('modalDetalleSolicitud').style.display = 'none';
+    }
+
+    // Procesar solicitud (aprobar/rechazar)
+    function procesarSolicitud(id, estado) {
+        const formData = new FormData();
+        formData.append('action', 'validar_solicitud');
+        formData.append('solicitud_id', id);
+        formData.append('estado', estado);
+
+        fetch('../php/coordinador_actions.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if(data.success) {
+                alert('Solicitud procesada exitosamente');
+                cerrarModalDetalle();
+                cargarSolicitudes();
+            }
+        });
+    }
+
+        // Cerrar sesión
         function cerrarSesion() {
             fetch('../api/logout.php')
             .then(() => {
@@ -301,7 +360,7 @@
             });
         }
 
-        // Cargar cursos registrados con filtro
+        // Cargar cursos registrados with filter
         function cargarCursos() {
             const filtroLinea = document.getElementById('filtroLineaEnfasis').value;
             let url = '../php/coordinador_actions.php?action=list_cursos';

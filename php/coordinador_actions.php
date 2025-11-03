@@ -129,6 +129,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'eliminar_curso') {
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'obtener_solicitudes') {
+    $sql = "SELECT s.id, u.nombre AS remitente, u.rol, s.tipo, s.fecha, s.estado
+            FROM solicitudes s
+            JOIN usuarios u ON s.remitente_id = u.id
+            ORDER BY s.fecha DESC";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $solicitudes = [];
+    while ($row = $result->fetch_assoc()) {
+        $solicitudes[] = $row;
+    }
+    echo json_encode($solicitudes);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'detalle_solicitud' && isset($_GET['id'])) {
+    $id = intval($_GET['id']);
+    $sql = "SELECT s.*, u.nombre AS remitente, u.rol
+            FROM solicitudes s
+            JOIN usuarios u ON s.remitente_id = u.id
+            WHERE s.id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('i', $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $detalle = $result->fetch_assoc();
+    echo json_encode($detalle);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'validar_solicitud') {
+    $solicitud_id = intval($_POST['solicitud_id'] ?? 0);
+    $estado = $_POST['estado'] ?? '';
+    if (!in_array($estado, ['aprobada', 'rechazada'])) {
+        echo json_encode(['success' => false, 'message' => 'Estado inválido']);
+        exit;
+    }
+    $sql = "UPDATE solicitudes SET estado = ? WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('si', $estado, $solicitud_id);
+    $ok = $stmt->execute();
+    echo json_encode(['success' => $ok]);
+    exit;
+}
+
 // Acción no reconocida
 echo json_encode(['success' => false, 'message' => 'Acción inválida.']);
 exit;
