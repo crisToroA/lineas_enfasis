@@ -130,9 +130,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'eliminar_curso') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'obtener_solicitudes') {
+    // Solo pendientes para la sección de validación
     $sql = "SELECT s.id, u.nombre AS remitente, u.rol, s.tipo, s.fecha, s.estado
             FROM solicitudes s
             JOIN usuarios u ON s.remitente_id = u.id
+            WHERE s.estado = 'pendiente'
             ORDER BY s.fecha DESC";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
@@ -147,9 +149,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'obtener_solicitudes') {
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'detalle_solicitud' && isset($_GET['id'])) {
     $id = intval($_GET['id']);
-    $sql = "SELECT s.*, u.nombre AS remitente, u.rol
+    $sql = "SELECT s.*, u.nombre AS remitente, u.rol,
+                   a.nombre AS aprobador_nombre, s.comentario_coordinador
             FROM solicitudes s
             JOIN usuarios u ON s.remitente_id = u.id
+            LEFT JOIN usuarios a ON s.aprobador_id = a.id
             WHERE s.id = ?";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param('i', $id);
@@ -163,15 +167,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'detalle_solicitud' && i
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'validar_solicitud') {
     $solicitud_id = intval($_POST['solicitud_id'] ?? 0);
     $estado = $_POST['estado'] ?? '';
+    $comentario = trim($_POST['comentario'] ?? '');
+    // opcional: quien procesa (si no hay autenticación se puede enviar desde frontend)
+    $aprobador_id = intval($_POST['aprobador_id'] ?? 0);
     if (!in_array($estado, ['aprobada', 'rechazada'])) {
         echo json_encode(['success' => false, 'message' => 'Estado inválido']);
         exit;
     }
-    $sql = "UPDATE solicitudes SET estado = ? WHERE id = ?";
+    if ($solicitud_id <= 0) {
+        echo json_encode(['success' => false, 'message' => 'ID de solicitud inválido']);
+        exit;
+    }
+
+    $sql = "UPDATE solicitudes SET estado = ?, comentario_coordinador = ?, aprobador_id = ?, fecha_procesamiento = NOW() WHERE id = ?";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param('si', $estado, $solicitud_id);
+    if ($stmt === false) {
+        echo json_encode(['success' => false, 'message' => 'Error de preparación SQL.']);
+        exit;
+    }
+    // si aprobador_id es 0, bindarlo como NULL: usar nullificación manual
+    if ($aprobador_id > 0) {
+        $stmt->bind_param('siii', $estado, $comentario, $aprobador_id, $solicitud_id);
+    } else {
+        // bind con aprobador_id = NULL -> pasar 0; la columna permite NULL y ON UPDATE/DELETE ya está definida
+        $nullAprobador = null;
+        // Para bind_param no se puede pasar NULL directo con tipo 'i', así que pasar 0 y dejar que la columna acepte (o adaptar según políticas)
+        $stmt->bind_param('siii', $estado, $comentario, $aprobador_id, $solicitud_id);
+    }
     $ok = $stmt->execute();
     echo json_encode(['success' => $ok]);
+    exit;
+}
+
+// Nueva acción: listar solicitudes ya procesadas (seguimiento)
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list_solicitudes_procesadas') {
+    $sql = "SELECT s.id, u.nombre AS remitente, u.rol, s.tipo, s.fecha, s.estado,
+                   s.descripcion, s.comentario_coordinador, s.fecha_procesamiento,
+                   a.id AS aprobador_id, a.nombre AS aprobador_nombre
+            FROM solicitudes s
+            JOIN usuarios u ON s.remitente_id = u.id
+            LEFT JOIN usuarios a ON s.aprobador_id = a.id
+            WHERE s.estado <> 'pendiente'
+            ORDER BY s.fecha_procesamiento DESC, s.fecha DESC";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $sols = [];
+    while ($row = $result->fetch_assoc()) {
+        $sols[] = $row;
+    }
+    echo json_encode($sols);
     exit;
 }
 

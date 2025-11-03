@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS solicitudes (
     FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE SET NULL
 );
 
+-- Agregar campos para registrar quién procesa la solicitud y el comentario del coordinador
+ALTER TABLE solicitudes
+  ADD COLUMN IF NOT EXISTS aprobador_id INT NULL AFTER estado,
+  ADD COLUMN IF NOT EXISTS comentario_coordinador TEXT NULL AFTER descripcion,
+  ADD COLUMN IF NOT EXISTS fecha_procesamiento TIMESTAMP NULL AFTER fecha;
+
+-- Crear FK opcional hacia usuarios para aprobador (si la tabla usuarios existe)
+ALTER TABLE solicitudes
+  ADD CONSTRAINT IF NOT EXISTS fk_solicitudes_aprobador
+  FOREIGN KEY (aprobador_id) REFERENCES usuarios(id) ON DELETE SET NULL ON UPDATE CASCADE;
+
 -- Cursos de ejemplo (Robótica)
 DELETE FROM cursos WHERE codigo IN ('ARD101','ROB201');
 INSERT IGNORE INTO cursos (nombre, codigo, semestre, profesor_id, linea_enfasis_id)

@@ -130,25 +130,74 @@
 
         <!-- Seguimiento Aprobaciones Section -->
         <div id="seguimiento" class="content-section">
-            <div class="filter-group">
-                <label>Filtrar por Semestre:</label>
-                <select>
-                    <option>2024-1</option>
-                    <option>2024-2</option>
-                    <option>2025-1</option>
-                </select>
-            </div>
+		<div class="filter-group">
+			<label>Filtrar por Semestre:</label>
+			<select>
+				<option>2024-1</option>
+				<option>2024-2</option>
+				<option>2025-1</option>
+			</select>
+		</div>
 
-            <div class="seguimiento-container">
-                <!-- Lista de Solicitudes -->
-                <div class="solicitudes-list">
-                    <h2 class="section-title">Listado de Solicitudes</h2>
-                    
-                    
-                </div>
+		<div class="seguimiento-container">
+			<!-- Lista de Solicitudes procesadas -->
+			<div class="solicitudes-list">
+				<h2 class="section-title">Listado de Solicitudes (Aprobadas / Rechazadas)</h2>
+				<div id="listaSeguimiento">
+					<!-- Se llenará dinámicamente -->
+				</div>
+			</div>
 
+			<!-- Panel detalle (visor de una solicitud seleccionada) -->
+			<div class="detalles-panel" id="panelDetalleSeguimiento">
+				<h2 class="section-title">Detalle</h2>
+				<div id="detalleContent">
+					<p><b>Tipo:</b> <span id="detalleTipo">-</span></p>
+					<p><b>Remitente:</b> <span id="detalleRemitente">-</span></p>
+					<p><b>Rol:</b> <span id="detalleRol">-</span></p>
+					<p><b>Fecha envío:</b> <span id="detalleFecha">-</span></p>
+					<p><b>Estado:</b> <span id="detalleEstado">-</span></p>
+					<p><b>Descripción (remitente):</b></p>
+					<p id="detalleDescripcion">-</p>
+					<p><b>Comentario del coordinador:</b></p>
+					<p id="detalleComentarioCoordinador">-</p>
+					<p><b>Aprobado por:</b> <span id="detalleAprobador">-</span></p>
+					<p><b>Fecha de procesado:</b> <span id="detalleFechaProcesamiento">-</span></p>
+				</div>
+			</div>
+		</div>
+	</div>
 
-                
+	<!-- Modal detalle / validación -->
+	<div id="modalDetalleSolicitud" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:9999;">
+		<div style="background:white;border-radius:8px;padding:20px;max-width:800px;width:95%;max-height:90vh;overflow:auto;position:relative;">
+			<button onclick="cerrarModalDetalle()" style="position:absolute;right:12px;top:12px;background:#eee;border:none;padding:8px;border-radius:6px;cursor:pointer;">Cerrar</button>
+			<h3>Detalle de Solicitud</h3>
+			<p><b>Tipo:</b> <span id="detalleTipo">-</span></p>
+			<p><b>Remitente:</b> <span id="detalleRemitente">-</span></p>
+			<p><b>Rol:</b> <span id="detalleRol">-</span></p>
+			<p><b>Fecha envío:</b> <span id="detalleFecha">-</span></p>
+			<p><b>Estado:</b> <span id="detalleEstado">-</span></p>
+			<p><b>Descripción (remitente):</b></p>
+			<p id="detalleDescripcion">-</p>
+
+			<!-- Comentario del coordinador (si ya hay) -->
+			<div id="detalleComentarioExistente" style="margin-top:10px;display:none;">
+				<p><b>Comentario del coordinador:</b></p>
+				<p id="detalleComentarioCoordinador">-</p>
+			</div>
+
+			<!-- Área para dejar comentario al procesar (solo cuando está pendiente) -->
+			<div id="detalleAcciones" style="margin-top:16px;display:none;">
+				<label for="coordinatorComment"><b>Comentario para el remitente (requerido)</b></label>
+				<textarea id="coordinatorComment" style="width:100%;min-height:100px;padding:8px;margin-top:8px;border:1px solid #ddd;border-radius:6px;"></textarea>
+				<div style="display:flex;gap:10px;margin-top:12px;">
+					<button id="btnAprobar" class="btn-action btn-aprobar" style="padding:8px 16px;">Aprobar</button>
+					<button id="btnRechazar" class="btn-action btn-rechazar" style="padding:8px 16px;">Rechazar</button>
+				</div>
+			</div>
+		</div>
+	</div>
 
     <script>
         function showSection(sectionId) {
@@ -252,22 +301,34 @@
         fetch(`../php/coordinador_actions.php?action=detalle_solicitud&id=${id}`)
         .then(res => res.json())
         .then(data => {
-            document.getElementById('detalleTipo').textContent = data.tipo;
-            document.getElementById('detalleRemitente').textContent = data.remitente;
-            document.getElementById('detalleRol').textContent = data.rol;
-            document.getElementById('detalleFecha').textContent = data.fecha;
-            document.getElementById('detalleEstado').textContent = data.estado.charAt(0).toUpperCase() + data.estado.slice(1);
+            document.getElementById('detalleTipo').textContent = data.tipo || '-';
+            document.getElementById('detalleRemitente').textContent = data.remitente || '-';
+            document.getElementById('detalleRol').textContent = data.rol || '-';
+            document.getElementById('detalleFecha').textContent = data.fecha || '-';
+            document.getElementById('detalleEstado').textContent = (data.estado ? data.estado.charAt(0).toUpperCase() + data.estado.slice(1) : '-');
             document.getElementById('detalleDescripcion').textContent = data.descripcion || '(Sin detalles)';
-            document.getElementById('modalDetalleSolicitud').style.display = 'flex';
+
+            // Comentario del coordinador (si existe)
+            if (data.comentario_coordinador && data.comentario_coordinador.trim() !== '') {
+                document.getElementById('detalleComentarioExistente').style.display = 'block';
+                document.getElementById('detalleComentarioCoordinador').textContent = data.comentario_coordinador;
+            } else {
+                document.getElementById('detalleComentarioExistente').style.display = 'none';
+                document.getElementById('detalleComentarioCoordinador').textContent = '-';
+            }
 
             // Mostrar/ocultar botones según estado
             if (data.estado === 'pendiente') {
-                document.getElementById('detalleAcciones').style.display = 'flex';
+                document.getElementById('detalleAcciones').style.display = 'block';
+                document.getElementById('coordinatorComment').value = '';
                 document.getElementById('btnAprobar').onclick = function() { procesarSolicitud(data.id, 'aprobada'); };
                 document.getElementById('btnRechazar').onclick = function() { procesarSolicitud(data.id, 'rechazada'); };
             } else {
                 document.getElementById('detalleAcciones').style.display = 'none';
             }
+
+            // Mostrar modal y limpiar posibles campos
+            document.getElementById('modalDetalleSolicitud').style.display = 'flex';
         });
     }
 
@@ -275,12 +336,20 @@
         document.getElementById('modalDetalleSolicitud').style.display = 'none';
     }
 
-    // Procesar solicitud (aprobar/rechazar)
+    // Procesar solicitud (aprobar/rechazar) con comentario
     function procesarSolicitud(id, estado) {
+        const comentario = document.getElementById('coordinatorComment').value.trim();
+        if (!comentario) {
+            alert('Por favor deje un comentario antes de procesar la solicitud.');
+            return;
+        }
         const formData = new FormData();
         formData.append('action', 'validar_solicitud');
         formData.append('solicitud_id', id);
         formData.append('estado', estado);
+        formData.append('comentario', comentario);
+        // Si se dispone de id de coordinador en frontend, se puede anexar:
+        // formData.append('aprobador_id', 123);
 
         fetch('../php/coordinador_actions.php', {
             method: 'POST',
@@ -292,9 +361,60 @@
                 alert('Solicitud procesada exitosamente');
                 cerrarModalDetalle();
                 cargarSolicitudes();
+                cargarSeguimiento(); // actualizar seguimiento
+            } else {
+                alert('Error al procesar la solicitud');
             }
+        })
+        .catch(err => {
+            console.error('Error validar solicitud', err);
+            alert('Error al conectar con el servidor.');
         });
     }
+
+    // Cargar seguimiento (solicitudes aprobadas/rechazadas)
+		function cargarSeguimiento() {
+			fetch('../php/coordinador_actions.php?action=list_solicitudes_procesadas')
+			.then(res => res.json())
+			.then(data => {
+				const cont = document.getElementById('listaSeguimiento');
+				if (!Array.isArray(data) || data.length === 0) {
+					cont.innerHTML = '<p>No hay solicitudes procesadas.</p>';
+					return;
+				}
+				cont.innerHTML = '';
+				data.forEach(s => {
+					const div = document.createElement('div');
+					div.className = 'historial-item';
+					div.style.marginBottom = '12px';
+					div.innerHTML = `
+						<div style="display:flex;justify-content:space-between;align-items:center;">
+							<div>
+								<b>(${s.estado.toUpperCase()})</b> ${s.tipo} — <span style="color:#666">${s.remitente}</span>
+								<div style="font-size:13px;color:#999;margin-top:6px;">Enviado: ${s.fecha} • Procesado: ${s.fecha_procesamiento || '-'}</div>
+							</div>
+							<div style="text-align:right;">
+								<div style="font-size:13px;color:#333;">${s.aprobador_nombre ? s.aprobador_nombre : '—'}</div>
+								<button class="btn-action" style="margin-top:8px;padding:6px 10px;" onclick="verDetalleSolicitud(${s.id})">Ver</button>
+							</div>
+						</div>
+						<div style="margin-top:8px;">
+							<p style="margin:0;"><b>Descripción (remitente):</b></p>
+							<p style="margin:0;color:#444;">${s.descripcion || '(Sin descripción)'}</p>
+							<div style="margin-top:8px;">
+								<p style="margin:0;"><b>Comentario del coordinador:</b></p>
+								<p style="margin:0;color:#444;">${s.comentario_coordinador || '(Sin comentario)'}</p>
+							</div>
+						</div>
+					`;
+					cont.appendChild(div);
+				});
+			})
+			.catch(err => {
+				console.error('Error cargar seguimiento', err);
+				document.getElementById('listaSeguimiento').innerHTML = '<p>Error al cargar seguimiento.</p>';
+			});
+		}
 
         // Cerrar sesión
         function cerrarSesion() {
@@ -422,6 +542,7 @@
 		cargarProfesores();
         cargarLineasEnfasis();
         cargarCursos();
+        cargarSeguimiento();
     </script>
 </body>
 </html>
