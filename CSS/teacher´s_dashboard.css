@@ -65,3 +65,69 @@ h3 {
 .alert {
   border-radius: 10px;
 }
+
+/* ==== Calendario estilizado ==== */
+.calendar-container {
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 20px;
+  background-color: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Ajuste general del calendario */
+#calendar {
+  max-width: 100%;
+  margin: 0 auto;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Encabezado */
+.fc-toolbar-title {
+  color: #b31312; /* rojo institucional */
+  font-weight: bold;
+  font-size: 1.25rem;
+}
+
+.fc-button {
+  background-color: #b31312 !important;
+  border: none !important;
+  color: white !important;
+  font-size: 0.9rem !important;
+  border-radius: 6px !important;
+  padding: 5px 10px !important;
+}
+
+.fc-button:hover {
+  background-color: #8e0f0f !important;
+}
+
+.fc-button-primary:not(:disabled).fc-button-active {
+  background-color: #b31312 !important;
+  border-color: #b31312 !important;
+}
+
+/* Días y celdas */
+.fc-daygrid-day {
+  font-size: 0.9rem;
+}
+
+.fc-daygrid-day-number {
+  color: #333;
+  text-decoration: none;
+}
+
+.fc-day-today {
+  background-color: rgba(179, 19, 18, 0.1) !important;
+  border: 1px solid #b31312 !important;
+}
+
+/* Eventos dentro del calendario */
+.fc-event {
+  background-color: #b31312 !important;
+  border: none !important;
+  color: white !important;
+  border-radius: 5px !important;
+  padding: 2px 4px !important;
+  font-size: 0.8rem !important;
+}
