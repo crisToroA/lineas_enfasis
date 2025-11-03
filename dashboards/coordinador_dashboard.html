@@ -39,23 +39,67 @@
                     <div class="form-grid">
                         <div class="form-group">
                             <label>Nombre del Curso</label>
-                            <input type="text" placeholder="Ej: Cálculo Diferencial">
+                            <input type="text" id="curso_nombre" name="nombre" placeholder="Ej: Cálculo Diferencial" required>
                         </div>
                         <div class="form-group">
                             <label>Código del Curso</label>
-                            <input type="text" placeholder="Ej: MAT101">
+                            <input type="text" id="curso_codigo" name="codigo" placeholder="Ej: MAT101" required>
                         </div>
                         <div class="form-group">
                             <label>Semestre</label>
-                            <select>
+                            <select id="curso_semestre" name="semestre" required>
+                                <option value="">Seleccione...</option>
                                 <option>2024-1</option>
                                 <option>2024-2</option>
                                 <option>2025-1</option>
                             </select>
                         </div>
+
+                        <!-- Nuevo: selector de profesor relacionado -->
+                        <div class="form-group">
+                            <label>Profesor responsable</label>
+                            <select id="profesorSelect" name="profesor_id" required>
+                                <option value="">Cargando profesores...</option>
+                            </select>
+                        </div>
+
+                        <!-- Nuevo: selector de línea de énfasis -->
+                        <div class="form-group">
+                            <label>Línea de Énfasis</label>
+                            <select id="lineaEnfasisSelect" name="linea_enfasis_id" required>
+                                <option value="">Cargando líneas de énfasis...</option>
+                            </select>
+                        </div>
                     </div>
                     <button type="submit" class="btn-submit">Registrar Curso</button>
                 </form>
+            </div>
+            <!-- Nuevo: Filtro por línea de énfasis -->
+            <div class="card" style="margin-top:30px;">
+                <h2 class="section-title">Cursos Registrados</h2>
+                <div style="margin-bottom:16px;">
+                    <label for="filtroLineaEnfasis"><b>Filtrar por Línea de Énfasis:</b></label>
+                    <select id="filtroLineaEnfasis">
+                        <option value="">Todas</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table id="tablaCursos">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Código</th>
+                                <th>Semestre</th>
+                                <th>Línea de Énfasis</th>
+                                <th>Profesor</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Se cargan dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -115,19 +159,42 @@
         // Función para registrar curso
         document.getElementById('registroCursoForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const formData = new FormData(this);
-            formData.append('action', 'registrar_curso');
+            const nombre = document.getElementById('curso_nombre').value.trim();
+            const codigo = document.getElementById('curso_codigo').value.trim();
+            const semestre = document.getElementById('curso_semestre').value;
+            const profesor_id = document.getElementById('profesorSelect').value;
+            const linea_enfasis_id = document.getElementById('lineaEnfasisSelect').value;
 
-            fetch('../api/coordinador_actions.php', {
+            if (!nombre || !codigo || !semestre || !profesor_id || !linea_enfasis_id) {
+                alert('Complete todos los campos del formulario.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'registrar_curso');
+            formData.append('nombre', nombre);
+            formData.append('codigo', codigo);
+            formData.append('semestre', semestre);
+            formData.append('profesor_id', profesor_id);
+            formData.append('linea_enfasis_id', linea_enfasis_id);
+
+            fetch('../php/coordinador_actions.php', {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
-            .then(data => {
-                if(data.success) {
-                    alert('Curso registrado exitosamente');
+            .then(res => res.json())
+            .then(resp => {
+                if (resp.success) {
+                    alert('Curso registrado correctamente.');
                     this.reset();
+                    cargarCursos(); // <--- recarga la tabla
+                } else {
+                    alert('Error: ' + (resp.message || 'No fue posible registrar el curso.'));
                 }
+            })
+            .catch(err => {
+                console.error('Error registrar curso', err);
+                alert('Error al conectar con el servidor.');
             });
         });
 
@@ -182,8 +249,120 @@
             });
         }
 
-        // Cargar solicitudes al iniciar
-        cargarSolicitudes();
+        // Cargar lista de profesores desde el servidor
+		function cargarProfesores() {
+			const select = document.getElementById('profesorSelect');
+			select.innerHTML = '<option value="">Cargando profesores...</option>';
+
+			fetch('../php/coordinador_actions.php?action=list_profesores')
+			.then(res => res.json())
+			.then(data => {
+				if (!Array.isArray(data)) {
+					select.innerHTML = '<option value="">No se encontraron profesores</option>';
+					return;
+				}
+				select.innerHTML = '<option value="">Seleccione un profesor</option>';
+				data.forEach(prof => {
+					const opt = document.createElement('option');
+					opt.value = prof.id;
+					opt.textContent = prof.nombre + ' (' + prof.documento + ')';
+					select.appendChild(opt);
+				});
+			})
+			.catch(err => {
+				console.error('Error cargando profesores', err);
+				select.innerHTML = '<option value="">Error al cargar profesores</option>';
+			});
+		}
+
+        // Cargar líneas de énfasis en ambos selects
+        function cargarLineasEnfasis() {
+            fetch('../php/coordinador_actions.php?action=list_lineas_enfasis')
+            .then(res => res.json())
+            .then(data => {
+                // Para el formulario de registro
+                const selectForm = document.getElementById('lineaEnfasisSelect');
+                selectForm.innerHTML = '<option value="">Seleccione una línea de énfasis</option>';
+                data.forEach(le => {
+                    const opt = document.createElement('option');
+                    opt.value = le.id;
+                    opt.textContent = le.nombre;
+                    selectForm.appendChild(opt);
+                });
+                // Para el filtro
+                const selectFiltro = document.getElementById('filtroLineaEnfasis');
+                selectFiltro.innerHTML = '<option value="">Todas</option>';
+                data.forEach(le => {
+                    const opt = document.createElement('option');
+                    opt.value = le.id;
+                    opt.textContent = le.nombre;
+                    selectFiltro.appendChild(opt);
+                });
+            });
+        }
+
+        // Cargar cursos registrados con filtro
+        function cargarCursos() {
+            const filtroLinea = document.getElementById('filtroLineaEnfasis').value;
+            let url = '../php/coordinador_actions.php?action=list_cursos';
+            if (filtroLinea) url += '&linea_enfasis_id=' + encodeURIComponent(filtroLinea);
+
+            fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                const tbody = document.querySelector('#tablaCursos tbody');
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6">No hay cursos registrados.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                data.forEach(curso => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${curso.nombre}</td>
+                        <td>${curso.codigo}</td>
+                        <td>${curso.semestre}</td>
+                        <td>${curso.linea_enfasis_nombre}</td>
+                        <td>${curso.profesor_nombre}</td>
+                        <td>
+                            <button onclick="eliminarCurso(${curso.id})" class="btn-action btn-rechazar" style="padding:4px 12px;">Eliminar</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+
+        // Eliminar curso
+        function eliminarCurso(id) {
+            if (!confirm('¿Seguro que deseas eliminar este curso?')) return;
+            const formData = new FormData();
+            formData.append('action', 'eliminar_curso');
+            formData.append('curso_id', id);
+
+            fetch('../php/coordinador_actions.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(resp => {
+                if (resp.success) {
+                    alert('Curso eliminado.');
+                    cargarCursos();
+                } else {
+                    alert('No se pudo eliminar el curso.');
+                }
+            });
+        }
+
+        // Recargar cursos al cambiar filtro
+        document.getElementById('filtroLineaEnfasis').addEventListener('change', cargarCursos);
+
+        // Cargar solicitudes, profesores y líneas de énfasis al iniciar
+		cargarSolicitudes();
+		cargarProfesores();
+        cargarLineasEnfasis();
+        cargarCursos();
     </script>
 </body>
 </html>
