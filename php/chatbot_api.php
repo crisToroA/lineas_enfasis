@@ -8,7 +8,14 @@ if ($q === '') {
     exit;
 }
 
-// Cargar claves desde entorno o php/config.php (no incluir claves en repo)
+// --- Seguridad: NUNCA aceptar clave desde el cliente ---
+if (!empty($_POST['api_key'])) {
+    // Si alguien intenta enviar una api_key desde el cliente, la rechazamos.
+    echo json_encode(['success' => false, 'message' => 'No se permite enviar claves desde el cliente.']);
+    exit;
+}
+
+// Cargar clave desde entorno o desde php/config.php (config.php NO debe subirse al repositorio)
 $openai_key = getenv('OPENAI_API_KEY') ?: null;
 $gemini_key = getenv('GEMINI_API_KEY') ?: null;
 $gemini_endpoint = getenv('GEMINI_ENDPOINT') ?: null;
@@ -18,6 +25,15 @@ if (!$openai_key && file_exists(__DIR__ . '/config.php')) {
     if (defined('OPENAI_API_KEY') && OPENAI_API_KEY) $openai_key = OPENAI_API_KEY;
     if (defined('GEMINI_API_KEY') && GEMINI_API_KEY) $gemini_key = GEMINI_API_KEY;
     if (defined('GEMINI_ENDPOINT') && GEMINI_ENDPOINT) $gemini_endpoint = GEMINI_ENDPOINT;
+}
+
+// Si no hay clave, devolver mensaje instructivo (no se expone la clave)
+if (!$openai_key && !$gemini_key) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'No hay una API key configurada en el servidor. Configure OPENAI_API_KEY o GEMINI_API_KEY en las variables de entorno o en php/config.php (no subir ese archivo).'
+    ]);
+    exit;
 }
 
 // Mensaje de sistema que restringe el ámbito de respuesta
@@ -62,12 +78,9 @@ if ($openai_key) {
     // si falla, continuamos a Gemini o fallback
 }
 
-/* 2) Intento usando Gemini (si está configurado).
-   Nota: cada proveedor tiene su propio API; aquí se hace un intento genérico.
-   Configure GEMINI_ENDPOINT en el servidor con la URL correcta del endpoint de generación. */
+/* 2) Intento usando Gemini (si está configurado) */
 if (!$openai_key && $gemini_key && $gemini_endpoint) {
     $body = [
-        // estructura simple; adapte según el endpoint real de Gemini/PaLM que vaya a usar
         'prompt' => $system_prompt . "\n\nUsuario: " . $q,
         'max_output_tokens' => 600,
         'temperature' => 0.2
@@ -89,7 +102,6 @@ if (!$openai_key && $gemini_key && $gemini_endpoint) {
 
     if ($resp !== false && $httpcode < 400) {
         $j = json_decode($resp, true);
-        // intentar extraer texto en varias formas comunes
         $answer = null;
         if (isset($j['output_text'])) $answer = $j['output_text'];
         if (!$answer && isset($j['candidates'][0]['content'])) $answer = $j['candidates'][0]['content'];

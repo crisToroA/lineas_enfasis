@@ -1,12 +1,15 @@
 <?php
-// Copie este archivo a php/config.php y añada sus claves y endpoints.
-// No comitear config.php con claves en repositorios públicos.
+// Copie este archivo a php/config.php y añada su(s) clave(s).
+// NO subir php/config.php a repositorios públicos.
 
-// OpenAI (opcional)
-define('OPENAI_API_KEY', 'pon-aqui-tu-clave-openai'); // ejemplo: 'sk-...'
+// Ejemplo para OpenAI — REEMPLAZAR con su clave en el servidor (NO en el repo)
+define('OPENAI_API_KEY', 'pon-aqui-tu-clave-openai');
 
-// Gemini/PaLM (opcional): si usa Gemini proporcione la clave y el endpoint de generación.
-// GEMINI_ENDPOINT debe ser la URL pública del endpoint de generación que su proveedor provea.
-// Ejemplo (no real): 'https://generativeai.googleapis.com/v1beta2/models/your-model:generate'
-define('GEMINI_API_KEY', 'pon-aqui-tu-clave-gemini');
-define('GEMINI_ENDPOINT', 'https://tu-endpoint-gemini.example.com/v1/generate');
+// (Opcional) Gemini/PaLM
+define('GEMINI_API_KEY', '');
+define('GEMINI_ENDPOINT', '');
+
+// Recomendación:
+// - Añada php/config.php a .gitignore.
+// - Use variables de entorno en producción (recomendado).
+// - Si la clave fue expuesta, revoque y genere una nueva inmediatamente.
