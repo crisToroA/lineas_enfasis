@@ -3,8 +3,8 @@ body {
     margin: 0;
     padding: 0;
     font-family: Arial, sans-serif;
-    height: 100vh;
-    overflow: hidden;
+    height: auto;
+    overflow: auto;
 }
 
 /* Header */
@@ -19,13 +19,16 @@ body {
 
 /* Contenedor principal */
 .main-container {
+    min-height: calc(100vh - 70px);
     display: flex;
-    height: calc(100vh - 70px);
+    flex-wrap: wrap;
+    align-items: stretch;
 }
 
 /* Sección izquierda - Formulario */
 .left-section {
-    flex: 1;
+    flex: 1 1 320px;
+    min-width: 260px;
     background-color: #f8f9fa;
     display: flex;
     flex-direction: column;
@@ -35,7 +38,9 @@ body {
 
 /* Sección derecha - Imagen */
 .right-section {
-    flex: 1;
+    flex: 1 1 320px;
+    min-width: 260px;
+    min-height: 220px;
     background-image: url(https://estudiantes.udemedellin.edu.co/wp-content/uploads/2022/08/prometeo.jpg);
     background-size: cover;
     background-position: center;
@@ -105,22 +110,26 @@ body {
 
 /* Responsive - Tablets */
 @media (max-width: 992px) {
-    .right-section {
-        display: none;
-    }
-    
-    .left-section {
-        padding: 40px;
-    }
+    .main-container { flex-direction: column; height: auto; }
+    .left-section { padding: 32px; height: auto; }
+    .right-section { display: none; height: 200px; }
+    body { overflow-y: auto; }
+    .left-section { padding: 28px; }
 }
 
 /* Responsive - Móviles */
 @media (max-width: 576px) {
-    .left-section {
-        padding: 20px;
-    }
-    
-    .welcome-title {
-        font-size: 2rem;
-    }
+    .left-section { padding: 20px; }
+    .welcome-title { font-size: 1.8rem; }
+    .btn-login { padding: 12px; font-size: 0.95rem; }
+}
+
+/* Chatbot: asegurarse que el modal sea usable en móviles */
+.chatbot-modal {
+    width: 360px;
+    max-width: calc(100% - 32px);
+}
+@media (max-width: 420px) {
+    .chatbot-modal { width: calc(100% - 24px); right: 12px; left: 12px; bottom: 80px; }
+    .chatbot-button { right: 12px; bottom: 12px; }
 }
