@@ -160,43 +160,47 @@
 
         <!-- Seguimiento Aprobaciones Section -->
         <div id="seguimiento" class="content-section">
-		<div class="filter-group">
-			<label>Filtrar por Semestre:</label>
-			<select>
-				<option>2024-1</option>
-				<option>2024-2</option>
-				<option>2025-1</option>
-			</select>
-		</div>
-
-		<div class="seguimiento-container">
-			<!-- Lista de Solicitudes procesadas -->
-			<div class="solicitudes-list">
-				<h2 class="section-title">Listado de Solicitudes (Aprobadas / Rechazadas)</h2>
-				<div id="listaSeguimiento">
-					<!-- Se llenará dinámicamente -->
-				</div>
+			<div class="filter-group">
+				<label>Filtrar por Semestre:</label>
+				<select>
+					<option>2024-1</option>
+					<option>2024-2</option>
+					<option>2025-1</option>
+				</select>
 			</div>
 
-			<!-- Panel detalle (visor de una solicitud seleccionada) -->
-			<div class="detalles-panel" id="panelDetalleSeguimiento">
-				<h2 class="section-title">Detalle</h2>
-				<div id="detalleContent">
-					<p><b>Tipo:</b> <span id="detalleTipo">-</span></p>
-					<p><b>Remitente:</b> <span id="detalleRemitente">-</span></p>
-					<p><b>Rol:</b> <span id="detalleRol">-</span></p>
-					<p><b>Fecha envío:</b> <span id="detalleFecha">-</span></p>
-					<p><b>Estado:</b> <span id="detalleEstado">-</span></p>
-					<p><b>Descripción (remitente):</b></p>
-					<p id="detalleDescripcion">-</p>
-					<p><b>Comentario del coordinador:</b></p>
-					<p id="detalleComentarioCoordinador">-</p>
-					<p><b>Aprobado por:</b> <span id="detalleAprobador">-</span></p>
-					<p><b>Fecha de procesado:</b> <span id="detalleFechaProcesamiento">-</span></p>
+			<div class="seguimiento-container">
+				<!-- Lista de Solicitudes procesadas -->
+				<div class="solicitudes-list" id="contSolicitudesProcesadas">
+					<h2 class="section-title">Listado de Solicitudes (Aprobadas / Rechazadas)</h2>
+					<div id="listaSeguimiento">
+						<!-- Se llenará dinámicamente -->
+					</div>
+				</div>
+
+				<!-- Panel detalle (ahora lateral y oculto por defecto) -->
+				<div class="detalles-panel" id="panelDetalleSeguimiento">
+					<button class="detalle-close" id="cerrarPanelDetalle">← Volver</button>
+					<h2 class="section-title" style="margin-top:0;">Detalle</h2>
+
+					<div id="detalleContentPanel">
+						<p><b>Tipo:</b> <span id="detalleTipoPanel">-</span></p>
+						<p><b>Remitente:</b> <span id="detalleRemitentePanel">-</span></p>
+						<p><b>Rol:</b> <span id="detalleRolPanel">-</span></p>
+						<p><b>Fecha envío:</b> <span id="detalleFechaPanel">-</span></p>
+						<p><b>Estado:</b> <span id="detalleEstadoPanel">-</span></p>
+						<p><b>Descripción (remitente):</b></p>
+						<p id="detalleDescripcionPanel">-</p>
+
+						<p><b>Comentario del coordinador:</b></p>
+						<p id="detalleComentarioCoordinadorPanel">-</p>
+
+						<p><b>Aprobado por:</b> <span id="detalleAprobadorPanel">-</span></p>
+						<p><b>Fecha de procesado:</b> <span id="detalleFechaProcesamientoPanel">-</span></p>
+					</div>
 				</div>
 			</div>
 		</div>
-	</div>
 
 	<!-- Modal detalle / validación (reemplazado por versión con vistas) -->
 	<div id="modalDetalleSolicitud" class="modal-overlay" style="display:none;">
