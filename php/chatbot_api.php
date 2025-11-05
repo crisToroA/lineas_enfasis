@@ -1,8 +1,42 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
+require_once 'conexion.php'; // añadido para poder guardar historial
+
+// Añadido: función para guardar preguntas y respuestas del chatbot
+function guardar_historial($conn, $usuario_id, $pregunta, $respuesta) {
+    // limitar tamaño para evitar problemas con campos muy largos
+    $pregunta = mb_substr((string)$pregunta, 0, 10000, 'UTF-8');
+    $respuesta = mb_substr((string)$respuesta, 0, 10000, 'UTF-8');
+
+    try {
+        if ($usuario_id > 0) {
+            $stmt = $conn->prepare("INSERT INTO chat_history (usuario_id, pregunta, respuesta) VALUES (?, ?, ?)");
+            if ($stmt) {
+                $stmt->bind_param('iss', $usuario_id, $pregunta, $respuesta);
+                $stmt->execute();
+                $stmt->close();
+            } else {
+                error_log('guardar_historial prepare failed: ' . $conn->error);
+            }
+        } else {
+            $stmt = $conn->prepare("INSERT INTO chat_history (pregunta, respuesta) VALUES (?, ?)");
+            if ($stmt) {
+                $stmt->bind_param('ss', $pregunta, $respuesta);
+                $stmt->execute();
+                $stmt->close();
+            } else {
+                error_log('guardar_historial prepare failed: ' . $conn->error);
+            }
+        }
+    } catch (Exception $e) {
+        error_log('guardar_historial exception: ' . $e->getMessage());
+    }
+}
 
 // Entrada
 $q = trim($_POST['q'] ?? '');
+$usuario_id = intval($_POST['usuario_id'] ?? 0);
+
 if ($q === '') {
     echo json_encode(['success' => true, 'answer' => 'Escribe tu pregunta sobre el portal (ej. "cómo registrar un curso", "qué hace validar solicitudes").']);
     exit;
@@ -55,6 +89,8 @@ if ($openai_key) {
         $j = json_decode($resp, true);
         if (isset($j['choices'][0]['message']['content'])) {
             $answer = trim($j['choices'][0]['message']['content']);
+            // guardar historial
+            guardar_historial($conn, $usuario_id, $q, $answer);
             echo json_encode(['success' => true, 'answer' => $answer]);
             exit;
         }
@@ -98,6 +134,7 @@ if (!$openai_key && $gemini_key && $gemini_endpoint) {
 
         if ($answer) {
             $answer = is_array($answer) ? json_encode($answer) : trim($answer);
+            guardar_historial($conn, $usuario_id, $q, $answer);
             echo json_encode(['success' => true, 'answer' => $answer]);
             exit;
         }
@@ -115,14 +152,24 @@ $faq = [
     'línea de énfasis' => 'Las líneas de énfasis están en la tabla lineas_enfasis y se usan para categorizar cursos.'
 ];
 
+$best = null;
 foreach ($faq as $k => $a) {
     if (mb_stripos($input, $k, 0, 'UTF-8') !== false) {
-        echo json_encode(['success' => true, 'answer' => $a]);
-        exit;
+        $best = ['key' => $k, 'answer' => $a];
+        break;
     }
 }
 
+if ($best !== null) {
+    $answer = $best['answer'];
+    guardar_historial($conn, $usuario_id, $q, $answer);
+    echo json_encode(['success' => true, 'answer' => $answer]);
+    exit;
+}
+
+// fallback final
 $fallback = 'Lo siento, no tengo información sobre esa pregunta específica. Puedo responder preguntas relacionadas con la aplicación (ej.: registrar curso, validar solicitud, seguimiento, profesores, líneas de énfasis).';
+guardar_historial($conn, $usuario_id, $q, $fallback);
 echo json_encode(['success' => true, 'answer' => $fallback]);
 exit;
 ?>

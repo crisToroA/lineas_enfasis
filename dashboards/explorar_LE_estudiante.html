@@ -56,73 +56,9 @@
                     </div>
                 </section>
 
-                <!-- Cards Grid -->
-                <div class="cards-grid">
-                    <!-- Card 1 -->
-                    <div class="emphasis-card">
-                        <div class="card-image">
-                            <img src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=500" alt="Desarrollo de Software">
-                        </div>
-                        <div class="card-body">
-                            <h3 class="card-title">Desarrollo de Software</h3>
-                            <button class="btn-select">Seleccionar</button>
-                        </div>
-                    </div>
-
-                    <!-- Card 2 -->
-                    <div class="emphasis-card">
-                        <div class="card-image">
-                            <img src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=500" alt="Inteligencia Artificial">
-                        </div>
-                        <div class="card-body">
-                            <h3 class="card-title">Inteligencia Artificial</h3>
-                            <button class="btn-select">Seleccionar</button>
-                        </div>
-                    </div>
-
-                    <!-- Card 3 -->
-                    <div class="emphasis-card">
-                        <div class="card-image">
-                            <img src="https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=500" alt="Gestión de Proyectos">
-                        </div>
-                        <div class="card-body">
-                            <h3 class="card-title">Gestión de Proyectos</h3>
-                            <button class="btn-select">Seleccionar</button>
-                        </div>
-                    </div>
-
-                    <!-- Card 4 -->
-                    <div class="emphasis-card">
-                        <div class="card-image">
-                            <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500" alt="Innovación y Emprendimiento">
-                        </div>
-                        <div class="card-body">
-                            <h3 class="card-title">Innovación y Emprendimiento</h3>
-                            <button class="btn-select">Seleccionar</button>
-                        </div>
-                    </div>
-
-                    <!-- Card 5 -->
-                    <div class="emphasis-card">
-                        <div class="card-image">
-                            <img src="https://images.unsplash.com/photo-1432888622747-4eb9a8f2c293?w=500" alt="Marketing Digital">
-                        </div>
-                        <div class="card-body">
-                            <h3 class="card-title">Marketing Digital</h3>
-                            <button class="btn-select">Seleccionar</button>
-                        </div>
-                    </div>
-
-                    <!-- Card 6 -->
-                    <div class="emphasis-card">
-                        <div class="card-image">
-                            <img src="https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=500" alt="Derecho Internacional">
-                        </div>
-                        <div class="card-body">
-                            <h3 class="card-title">Derecho Internacional</h3>
-                            <button class="btn-select">Seleccionar</button>
-                        </div>
-                    </div>
+                <!-- Cards Grid (reemplazado por generación dinámica) -->
+                <div id="cardsGrid" class="cards-grid" aria-live="polite">
+                    <!-- Las tarjetas se generarán dinámicamente desde la base de datos -->
                 </div>
             </main>
         </div>
@@ -165,13 +101,14 @@
         sendBtn.addEventListener('click', () => {
             const q = input.value.trim();
             if (!q) return;
+            const usuario_id = localStorage.getItem('currentUserId') || '';
             appendMessage('user', q);
             input.value = '';
             appendMessage('bot', 'Escribiendo...');
 
             fetch(endpoint, {
                 method: 'POST',
-                body: new URLSearchParams({ q })
+                body: new URLSearchParams({ q: q, usuario_id: usuario_id })
             })
             .then(r => r.json())
             .then(res => {
@@ -213,5 +150,64 @@
     }  
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+ 
+    <script>
+    // Cargar líneas de énfasis desde el backend y renderizar tarjetas
+    async function cargarLineasEstudiante() {
+        const cont = document.getElementById('cardsGrid');
+        cont.innerHTML = '<p style="color:#666;">Cargando líneas de énfasis...</p>';
+        try {
+            const res = await fetch('../php/coordinador_actions.php?action=list_lineas_enfasis', { cache: 'no-store' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            cont.innerHTML = '';
+            if (!Array.isArray(data) || data.length === 0) {
+                cont.innerHTML = '<p style="color:#666;">No se encontraron líneas de énfasis.</p>';
+                return;
+            }
+
+            const images = {
+                'Ingeniería de Software': 'https://images.unsplash.com/photo-1587620962725-abab7fe55159?w=800',
+                'Inteligencia Artificial': 'https://images.unsplash.com/photo-1508385082359-f9d8f6f20f6e?w=800',
+                'Robótica': 'https://images.unsplash.com/photo-1549921296-3b2d1e0a3f0b?w=800',
+                'Big Data': 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800',
+                'Gestión de la Información y el Conocimiento': 'https://images.unsplash.com/photo-1526378728272-1b2f1b6f3b7b?w=800'
+            };
+
+            data.forEach(le => {
+                const img = images[le.nombre] || 'https://images.unsplash.com/photo-1501877008226-4fca48a11b9d?w=800';
+                const card = document.createElement('div');
+                card.className = 'emphasis-card';
+                card.innerHTML = `
+                    <div class="card-image"><img src="${img}" alt="${escapeHtml(le.nombre)}"></div>
+                    <div class="card-body">
+                        <h3 class="card-title">${escapeHtml(le.nombre)}</h3>
+                        <p style="color:#666;font-size:14px;margin-bottom:10px;">Recursos, proyectos y guías introductorias sobre ${escapeHtml(le.nombre)}.</p>
+                        <div style="display:flex;gap:8px;">
+                            <a class="btn-select" href="../projects/linea.php?id=${encodeURIComponent(le.id)}">Ver</a>
+                            <button class="btn-select" onclick="abrirSimulador(${le.id}, '${escapeHtml(le.nombre)}')" style="background:#fff;color:#c8102e;border:1px solid #e6e6e6;">Simular</button>
+                        </div>
+                    </div>
+                `;
+                cont.appendChild(card);
+            });
+        } catch (err) {
+            console.error('Error cargar líneas de énfasis', err);
+            cont.innerHTML = '<p style="color:#c00;">Error al cargar las líneas.</p>';
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text && text !== 0) return '';
+        return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    function abrirSimulador(id, nombre) {
+        alert('Abrir simulador para: ' + nombre + ' (id=' + id + '). Implementa la vista del simulador según el proyecto.');
+    }
+
+    document.addEventListener('DOMContentLoaded', cargarLineasEstudiante);
+    </script>
+ 
+ </body>
+ </html>

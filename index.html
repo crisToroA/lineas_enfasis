@@ -42,7 +42,13 @@
                     <!-- Contraseña -->
                     <div class="mb-3">
                         <label for="password" class="form-label">Contraseña</label>
-                        <input type="password" class="form-control" id="password" name="password" placeholder="Ingrese su contraseña" required>
+                        <div style="position:relative;">
+                            <input type="password" class="form-control" id="password" name="password" placeholder="Ingrese su contraseña" required>
+                            <button type="button" id="togglePassword" title="Mostrar contraseña" style="position:absolute;right:8px;top:8px;border:none;background:transparent;cursor:pointer;font-size:18px;">👁️</button>
+                        </div>
+                        <div style="margin-top:8px;">
+                            <a href="#" id="linkForgot">¿Olvidó su contraseña?</a>
+                        </div>
                     </div>
 
                     <!-- Botón -->
@@ -75,6 +81,20 @@
         </div>
     </div>
 
+    <!-- Modal Olvidé contraseña -->
+    <div id="forgotModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:9999;">
+        <div style="background:white;padding:20px;border-radius:8px;max-width:420px;width:90%;">
+            <h4>Recuperar contraseña</h4>
+            <p>Ingrese su documento para recibir instrucciones.</p>
+            <input id="forgotDocumento" type="text" placeholder="Documento" style="width:100%;padding:10px;margin-top:8px;border:1px solid #ddd;border-radius:6px;">
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
+                <button id="cancelForgot" style="padding:8px 12px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer;">Cancelar</button>
+                <button id="sendForgot" style="padding:8px 12px;border-radius:6px;background:#c41e3a;color:#fff;border:none;cursor:pointer;">Enviar</button>
+            </div>
+            <div id="forgotFeedback" style="margin-top:10px;display:none;"></div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
 document.getElementById('loginForm').addEventListener('submit', function(e) {
@@ -94,13 +114,17 @@ document.getElementById('loginForm').addEventListener('submit', function(e) {
     formData.append('documento', documento);
     formData.append('password', password);
 
-    fetch('PHP/login.php', {
+    fetch('php/login.php', {
         method: 'POST',
         body: formData
     })
     .then(res => res.json())
     .then(data => {
         if (data.success) {
+            // almacenar id y nombre
+            if (data.id) localStorage.setItem('currentUserId', data.id);
+            if (data.nombre) localStorage.setItem('currentUserName', data.nombre);
+            // redirección según rol
             if (data.rol === 'profesor') {
                 window.location.href = 'dashboards/teacher_dashboard.html';
             } else if (data.rol === 'estudiante') {
@@ -115,6 +139,43 @@ document.getElementById('loginForm').addEventListener('submit', function(e) {
     .catch(err => console.error('Error:', err));
 });
 
+// toggle contraseña
+document.getElementById('togglePassword').addEventListener('click', function(){
+    const pwd = document.getElementById('password');
+    if (pwd.type === 'password') {
+        pwd.type = 'text';
+        this.textContent = '🙈';
+        this.title = 'Ocultar contraseña';
+    } else {
+        pwd.type = 'password';
+        this.textContent = '👁️';
+        this.title = 'Mostrar contraseña';
+    }
+});
+
+// forgot password modal
+document.getElementById('linkForgot').addEventListener('click', function(e){
+    e.preventDefault();
+    document.getElementById('forgotModal').style.display = 'flex';
+});
+document.getElementById('cancelForgot').addEventListener('click', function(){ document.getElementById('forgotModal').style.display = 'none'; });
+document.getElementById('sendForgot').addEventListener('click', function(){
+    const doc = document.getElementById('forgotDocumento').value.trim();
+    if (!doc) { alert('Ingrese su documento'); return; }
+    const fd = new FormData();
+    fd.append('documento', doc);
+    fetch('php/forgot_password.php', { method:'POST', body: fd })
+    .then(r => r.json())
+    .then(resp => {
+        const fb = document.getElementById('forgotFeedback');
+        fb.style.display = 'block';
+        fb.textContent = resp.message || (resp.success ? 'Enviado' : 'Error');
+        fb.style.color = resp.success ? '#155724' : '#721c24';
+        setTimeout(()=>{ document.getElementById('forgotModal').style.display = 'none'; fb.style.display='none'; }, 2500);
+    });
+});
+
+// Chatbot: enviar usuario_id si existe
 (function(){
         const openBtn = document.getElementById('openChat');
         const modal = document.getElementById('chatModal');
@@ -138,13 +199,14 @@ document.getElementById('loginForm').addEventListener('submit', function(e) {
         sendBtn.addEventListener('click', () => {
             const q = input.value.trim();
             if (!q) return;
+            const usuario_id = localStorage.getItem('currentUserId') || '';
             appendMessage('user', q);
             input.value = '';
             appendMessage('bot', 'Escribiendo...');
 
             fetch(endpoint, {
                 method: 'POST',
-                body: new URLSearchParams({ q })
+                body: new URLSearchParams({ q: q, usuario_id: usuario_id })
             })
             .then(r => r.json())
             .then(res => {

@@ -1,18 +1,21 @@
 <?php
-include 'conexion.php';
+require_once 'conexion.php';
 
-$documento = $_POST['documento'];
-$password = $_POST['password'];
-$rol = $_POST['rol'];
+$documento = $_POST['documento'] ?? '';
+$password = $_POST['password'] ?? '';
+$rol = $_POST['rol'] ?? '';
 
-$sql = "SELECT * FROM usuarios WHERE documento = '$documento' AND password = MD5('$password') AND rol = '$rol'";
-$result = $conn->query($sql);
-
-if ($result->num_rows > 0) {
-    echo json_encode(["success" => true, "rol" => $rol]);
+// consulta segura
+$sql = "SELECT id, nombre, rol FROM usuarios WHERE documento = ? AND password = MD5(?) AND rol = ? LIMIT 1";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param('sss', $documento, $password, $rol);
+$stmt->execute();
+$result = $stmt->get_result();
+if ($row = $result->fetch_assoc()) {
+    echo json_encode(["success" => true, "rol" => $row['rol'], "id" => $row['id'], "nombre" => $row['nombre']]);
 } else {
     echo json_encode(["success" => false]);
 }
-
+$stmt->close();
 $conn->close();
 ?>

@@ -25,6 +25,9 @@
             <img src="https://previews.123rf.com/images/michaeljung/michaeljung0906/michaeljung090600290/5125275-teacher.jpg" alt="Icon" class="title-icon">
         </h1>
 
+        <!-- Zona de diagnóstico de BD -->
+        <div id="dbDiag" style="margin-bottom:18px;color:#666;font-size:14px;">Comprobando conexión a base de datos...</div>
+
         <!-- Navigation Tabs -->
         <div class="nav-tabs">
             <button class="nav-tab active" onclick="showSection('registrar')">Registrar Curso</button>
@@ -92,45 +95,7 @@
                     </div>
                 </form>
             </div>
-            <!-- Nuevo: Filtro por línea de énfasis + lista de cursos (tarjetas) -->
-            <div class="card" style="margin-top:30px;">
-                <div class="card-header" style="display:flex;flex-direction:column;gap:12px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-                        <h2 class="section-title" style="margin:0;">Cursos Registrados</h2>
-                        <div style="display:flex;gap:8px;align-items:center;">
-                            <input id="buscarCurso" type="text" placeholder="Buscar por nombre o código..." style="padding:10px 12px;border-radius:8px;border:1px solid #e6e6e6;width:260px;">
-                            <label for="filtroLineaEnfasis" style="margin:0 6px 0 0;font-weight:600;color:#333;">Línea:</label>
-                            <select id="filtroLineaEnfasis" style="padding:10px;border-radius:8px;border:1px solid #e6e6e6;">
-                                <option value="">Todas</option>
-                            </select>
-                        </div>
-                    </div>
-                    <p class="card-subtitle" style="margin:0;color:#666;font-size:13px;">Busca, filtra y administra los cursos registrados. Haz click en eliminar para borrarlo.</p>
-                </div>
-
-                <div id="listaCursos" class="courses-grid" style="margin-top:18px;">
-                    <!-- Se generan tarjetas de curso dinámicamente -->
-                </div>
-
-                <!-- Tabla de respaldo (oculta) para compatibilidad -->
-                <div class="table-container" style="display:none;">
-                    <table id="tablaCursos">
-                        <thead>
-                            <tr>
-                                <th>Nombre</th>
-                                <th>Código</th>
-                                <th>Semestre</th>
-                                <th>Línea de Énfasis</th>
-                                <th>Profesor</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Se cargan dinámicamente -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <!-- Eliminada la sección de "Cursos Registrados" por petición -->
         </div>
 
         <!-- Validar Solicitudes Section -->
@@ -267,47 +232,65 @@
             event.target.classList.add('active');
         }
 
-        // Función para registrar curso
-        document.getElementById('registroCursoForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const nombre = document.getElementById('curso_nombre').value.trim();
-            const codigo = document.getElementById('curso_codigo').value.trim();
-            const semestre = document.getElementById('curso_semestre').value;
-            const profesor_id = document.getElementById('profesorSelect').value;
-            const linea_enfasis_id = document.getElementById('lineaEnfasisSelect').value;
+        // Util: parsear respuesta segura
+async function parseJsonResponse(response) {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch (err) {
+        console.error('Respuesta no JSON del servidor:', text);
+        throw new Error('Respuesta inválida del servidor');
+    }
+}
 
-            if (!nombre || !codigo || !semestre || !profesor_id || !linea_enfasis_id) {
-                alert('Complete todos los campos del formulario.');
-                return;
-            }
+// Función para registrar curso (ajustada: ya no recarga la lista de cursos)
+document.getElementById('registroCursoForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const nombre = document.getElementById('curso_nombre').value.trim();
+    const codigo = document.getElementById('curso_codigo').value.trim();
+    const semestre = document.getElementById('curso_semestre').value;
+    const profesor_id = document.getElementById('profesorSelect').value;
+    const linea_enfasis_id = document.getElementById('lineaEnfasisSelect').value;
 
-            const formData = new FormData();
-            formData.append('action', 'registrar_curso');
-            formData.append('nombre', nombre);
-            formData.append('codigo', codigo);
-            formData.append('semestre', semestre);
-            formData.append('profesor_id', profesor_id);
-            formData.append('linea_enfasis_id', linea_enfasis_id);
+    if (!nombre || !codigo || !semestre || !profesor_id || !linea_enfasis_id) {
+        alert('Complete todos los campos del formulario.');
+        return;
+    }
 
-            fetch('../php/coordinador_actions.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(resp => {
-                if (resp.success) {
-                    alert('Curso registrado correctamente.');
-                    this.reset();
-                    cargarCursos(); // <--- recarga la tabla
-                } else {
-                    alert('Error: ' + (resp.message || 'No fue posible registrar el curso.'));
-                }
-            })
-            .catch(err => {
-                console.error('Error registrar curso', err);
-                alert('Error al conectar con el servidor.');
-            });
+    const formData = new FormData();
+    formData.append('action', 'registrar_curso');
+    formData.append('nombre', nombre);
+    formData.append('codigo', codigo);
+    formData.append('semestre', semestre);
+    formData.append('profesor_id', profesor_id);
+    formData.append('linea_enfasis_id', linea_enfasis_id);
+
+    try {
+        const res = await fetch('../php/coordinador_actions.php', {
+            method: 'POST',
+            body: formData
         });
+        if (!res.ok) {
+            // intentar leer cuerpo para depuración
+            const txt = await res.text();
+            console.error('Error HTTP al registrar curso:', res.status, txt);
+            alert('Error al registrar curso. Revise la consola para más detalles.');
+            return;
+        }
+        const resp = await parseJsonResponse(res);
+        if (resp.success) {
+            alert('Curso registrado correctamente.');
+            this.reset();
+            // No se llama a cargarCursos porque la vista de lista fue removida
+        } else {
+            console.error('Error registrar curso (back):', resp);
+            alert('Error: ' + (resp.message || 'No fue posible registrar el curso.'));
+        }
+    } catch (err) {
+        console.error('Error registrar curso', err);
+        alert('Error al procesar la solicitud. Revise la consola para más detalles.');
+    }
+});
 
         // Cargar solicitudes en tabla
         function cargarSolicitudes() {
@@ -462,12 +445,132 @@
         document.getElementById('modalBack').style.display = 'none';
 }
 
-        // Cargar solicitudes, profesores y líneas de énfasis al iniciar
-		cargarSolicitudes();
-		cargarProfesores();
-        cargarLineasEnfasis();
-        cargarCursos();
-        cargarSeguimiento();
+        // Reemplazar la función cargarLineasEnfasis por esta versión (ruta relativa y manejo de errores)
+	function cargarLineasEnfasis() {
+		const selectForm = document.getElementById('lineaEnfasisSelect');
+		const selectFiltro = document.getElementById('filtroLineaEnfasis');
+		if (selectForm) selectForm.innerHTML = '<option value="">Cargando líneas de énfasis...</option>';
+		if (selectFiltro) selectFiltro.innerHTML = '<option value="">Cargando...</option>';
+
+		fetch('../php/coordinador_actions.php?action=list_lineas_enfasis', { cache: 'no-store' })
+		.then(res => {
+			if (!res.ok) throw new Error('HTTP ' + res.status);
+			return res.json();
+		})
+		.then(data => {
+			if (!Array.isArray(data) || data.length === 0) {
+				if (selectForm) selectForm.innerHTML = '<option value="">No hay líneas disponibles</option>';
+				if (selectFiltro) selectFiltro.innerHTML = '<option value="">Todas</option>';
+				return;
+			}
+			if (selectForm) {
+				selectForm.innerHTML = '<option value="">Seleccione una línea de énfasis</option>';
+				data.forEach(le => {
+					const opt = document.createElement('option');
+					opt.value = le.id;
+					opt.textContent = le.nombre;
+					selectForm.appendChild(opt);
+				});
+			}
+			if (selectFiltro) {
+				selectFiltro.innerHTML = '<option value="">Todas</option>';
+				data.forEach(le => {
+					const opt = document.createElement('option');
+					opt.value = le.id;
+					opt.textContent = le.nombre;
+					selectFiltro.appendChild(opt);
+				});
+			}
+		})
+		.catch(err => {
+			console.error('Error cargando líneas de énfasis:', err);
+			if (selectForm) selectForm.innerHTML = '<option value="">Error al cargar líneas</option>';
+			if (selectFiltro) selectFiltro.innerHTML = '<option value="">Todas</option>';
+		});
+	}
+
+	// Reemplazado: función cargarProfesores (sin dependencia del botón)
+	async function cargarProfesores() {
+		const select = document.getElementById('profesorSelect');
+		if (!select) return;
+		select.disabled = true;
+		select.innerHTML = '<option value="">Cargando profesores...</option>';
+
+		try {
+			const res = await fetch('../php/coordinador_actions.php?action=list_profesores', { cache: 'no-store' });
+			if (!res.ok) throw new Error('HTTP ' + res.status);
+			const data = await res.json();
+
+			if (!Array.isArray(data) || data.length === 0) {
+				select.innerHTML = '<option value="">No se encontraron profesores</option>';
+				select.disabled = false;
+				return;
+			}
+
+			select.innerHTML = '<option value="">Seleccione un profesor</option>';
+			data.forEach(prof => {
+				const opt = document.createElement('option');
+				opt.value = prof.id;
+				opt.textContent = prof.nombre + (prof.documento ? ' (' + prof.documento + ')' : '');
+				select.appendChild(opt);
+			});
+			select.disabled = false;
+		} catch (err) {
+			console.error('Error cargando profesores', err);
+			select.innerHTML = '<option value="">Error al cargar profesores</option>';
+			select.disabled = false;
+		}
+	}
+
+    // Ejecutar cargas al DOMContentLoaded para asegurar que los elementos existen
+    document.addEventListener('DOMContentLoaded', function() {
+		// Diagnóstico simple de BD: invoca action=diagnose_db y muestra resultado
+    async function checkDb() {
+        const el = document.getElementById('dbDiag');
+        if (!el) return;
+        el.textContent = 'Verificando base de datos...';
+        try {
+            const res = await fetch('../php/coordinador_actions.php?action=diagnose_db', { cache: 'no-store' });
+            const txt = await res.text();
+            let j;
+            try { j = JSON.parse(txt); } catch (e) { el.innerHTML = '<span style="color:#c00">Respuesta inválida del servidor. Revisa la consola.</span>'; console.error('diagnose_db non-json:', txt); return; }
+            if (j.success) {
+                const parts = [];
+                if (j.database) parts.push('DB: <b>' + j.database + '</b>');
+                if (j.counts) {
+                    const cnts = Object.keys(j.counts).map(k => `${k}: ${j.counts[k] === null ? '<span style="color:#c00">-</span>' : j.counts[k]}`).join(' • ');
+                    parts.push('Tablas: ' + cnts);
+                }
+                el.innerHTML = parts.join(' — ');
+            } else {
+                el.innerHTML = '<span style="color:#c00">Diagnóstico falló: ' + (j.error || 'sin detalle') + '</span>';
+                console.error('diagnose_db error:', j);
+            }
+        } catch (err) {
+            el.innerHTML = '<span style="color:#c00">Error al conectar con el servidor: ' + (err.message || '') + '</span>';
+            console.error('checkDb fetch error', err);
+        }
+    }
+
+    checkDb(); // <-- diagnóstico visible
+		if (typeof cargarSolicitudes === 'function') cargarSolicitudes();
+		if (typeof cargarProfesores === 'function') cargarProfesores();
+		if (typeof cargarLineasEnfasis === 'function') cargarLineasEnfasis();
+		if (typeof cargarSeguimiento === 'function') cargarSeguimiento();
+	});
+
+    // Agregado: función global de cierre de sesión (limpia localStorage y redirige al index)
+    function cerrarSesion() {
+        try {
+            localStorage.removeItem('currentUserId');
+            localStorage.removeItem('currentUserName');
+            // añadir otras claves si se usan
+        } catch (e) {
+            console.warn('Error limpiando storage en cerrarSesion', e);
+        }
+        // redirigir al index (ruta relativa desde /dashboards)
+        window.location.href = '../index.html';
+    }
     </script>
 
     <!-- Chatbot widget -->
@@ -507,13 +610,14 @@
         sendBtn.addEventListener('click', () => {
             const q = input.value.trim();
             if (!q) return;
+            const usuario_id = localStorage.getItem('currentUserId') || '';
             appendMessage('user', q);
             input.value = '';
             appendMessage('bot', 'Escribiendo...');
 
             fetch(endpoint, {
                 method: 'POST',
-                body: new URLSearchParams({ q })
+                body: new URLSearchParams({ q: q, usuario_id: usuario_id })
             })
             .then(r => r.json())
             .then(res => {

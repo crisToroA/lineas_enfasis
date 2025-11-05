@@ -16,22 +16,13 @@ CREATE TABLE IF NOT EXISTS lineas_enfasis (
     nombre VARCHAR(100) NOT NULL UNIQUE
 );
 
--- Reemplazar las líneas de énfasis por las oficiales de Ingeniería de Sistemas
-DELETE FROM lineas_enfasis
-WHERE nombre NOT IN (
-  'Ingeniería de Software',
-  'Gestión de la Información y el Conocimiento',
-  'Inteligencia Artificial',
-  'Robótica',
-  'Big Data'
-);
-
+-- Asegurar que existan las líneas de énfasis oficiales (no duplicar)
 INSERT IGNORE INTO lineas_enfasis (nombre) VALUES
 ('Ingeniería de Software'),
-('Gestión de la Información y el Conocimiento'),
 ('Inteligencia Artificial'),
 ('Robótica'),
-('Big Data');
+('Big Data'),
+('Gestión de la Información y el Conocimiento');
 
 -- Tabla cursos actualizada con FK a lineas_enfasis
 CREATE TABLE IF NOT EXISTS cursos (
@@ -46,7 +37,7 @@ CREATE TABLE IF NOT EXISTS cursos (
     FOREIGN KEY (linea_enfasis_id) REFERENCES lineas_enfasis(id) ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
--- Tabla solicitudes redefinida
+-- Tabla solicitudes
 CREATE TABLE IF NOT EXISTS solicitudes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     remitente_id INT NOT NULL,
@@ -70,7 +61,7 @@ ALTER TABLE solicitudes
   ADD CONSTRAINT IF NOT EXISTS fk_solicitudes_aprobador
   FOREIGN KEY (aprobador_id) REFERENCES usuarios(id) ON DELETE SET NULL ON UPDATE CASCADE;
 
--- Cursos de ejemplo (Robótica)
+-- Cursos de ejemplo (Robótica) - requiere que existan usuarios con documento '2001'
 DELETE FROM cursos WHERE codigo IN ('ARD101','ROB201');
 INSERT IGNORE INTO cursos (nombre, codigo, semestre, profesor_id, linea_enfasis_id)
 SELECT 'Introducción a Arduino', 'ARD101', '2024-1', u.id, le.id
@@ -116,3 +107,28 @@ SELECT u.id, NULL, 'Suplemento de créditos',
        'pendiente'
 FROM usuarios u
 WHERE u.documento = '2001';
+
+-- Añadir usuarios de ejemplo (profesores) y un coordinador de prueba
+INSERT IGNORE INTO usuarios (documento, password, rol, nombre) VALUES
+('3001', MD5('prof3001'), 'profesor', 'Carlos Pérez'),
+('3002', MD5('prof3002'), 'profesor', 'María Gómez'),
+('3003', MD5('prof3003'), 'profesor', 'Javier Martínez'),
+('3004', MD5('prof3004'), 'profesor', 'Laura Ramírez'),
+('3005', MD5('prof3005'), 'profesor', 'Andrés Torres'),
+('3006', MD5('prof3006'), 'profesor', 'Sofía Morales'),
+('4001', MD5('coord4001'), 'coordinador', 'Laura Fernández');
+
+-- Añadir líneas de énfasis adicionales útiles para la sección de Arduino/Robótica
+INSERT IGNORE INTO lineas_enfasis (nombre) VALUES
+('Sistemas Embebidos'),
+('Arduino y Robótica Educativa');
+
+-- Tabla para guardar historial de preguntas del chatbot
+CREATE TABLE IF NOT EXISTS chat_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NULL,
+    pregunta TEXT NOT NULL,
+    respuesta TEXT NOT NULL,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
