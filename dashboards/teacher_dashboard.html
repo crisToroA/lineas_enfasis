@@ -105,55 +105,215 @@
 
   <!-- Script para cambiar pestañas -->
   <script>
+    // Añadir variables globales y utilidades
+    const CURRENT_PROF_ID = parseInt(localStorage.getItem('currentUserId') || 0, 10);
     function mostrarSeccion(seccion) {
       const secciones = ['cronogramas', 'calificaciones', 'reportes'];
       secciones.forEach(id => {
         document.getElementById(id).classList.add('d-none');
-        document.getElementById('tab-' + id).classList.remove('active');
+        const tab = document.getElementById('tab-' + id);
+        if (tab) tab.classList.remove('active');
       });
       document.getElementById(seccion).classList.remove('d-none');
-      document.getElementById('tab-' + seccion).classList.add('active');
+      const sel = document.getElementById('tab-' + seccion);
+      if (sel) sel.classList.add('active');
     }
 
+    // Cargar cursos asignados al profesor y poblar sección "Mis Cursos"
+    async function cargarCursosProfesor() {
+      if (!CURRENT_PROF_ID) return;
+      try {
+        const res = await fetch(`../php/coordinador_actions.php?action=list_mis_cursos_profesor&profesor_id=${CURRENT_PROF_ID}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const j = await res.json();
+        if (!j.success) {
+          console.error('Error list_mis_cursos_profesor', j);
+          return;
+        }
+        const cursos = j.data || [];
+        const container = document.querySelector('.container .row .col-md-6 .d-grid');
+        if (container) {
+            container.innerHTML = '';
+            cursos.forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'p-3 border rounded bg-white';
+                const horario = c.dia ? `${c.dia} ${c.hora_inicio ? c.hora_inicio.substring(0,5) : ''}–${c.hora_fin ? c.hora_fin.substring(0,5) : ''}` : 'Horario no asignado';
+                div.innerHTML = `<b>${c.nombre}</b><br>${c.semestre} • ${c.codigo} <br><small>${horario}</small>
+                                 <div style="margin-top:8px;"><button class="btn btn-sm btn-outline-primary" onclick="verAlumnosYCalificaciones(${c.id}, '${escapeHtml(c.nombre)}')">Ver Alumnos / Calificaciones</button>
+                                 <button class="btn btn-sm btn-outline-secondary" style="margin-left:6px;" onclick="abrirReporte(${c.id}, '${escapeHtml(c.nombre)}')">Reportar</button></div>`;
+                container.appendChild(div);
+            });
+        }
+        // actualizar calendario con eventos
+        if (window.calendar) {
+            window.calendar.removeAllEvents();
+            cursos.forEach(c => {
+                if (c.dia && c.hora_inicio) {
+                    // crear evento semanal: FullCalendar puede usar dow + time; aquí simplificamos creando eventos próximos (próxima semana día correspondiente)
+                    const dowMap = { 'Lunes':1,'Martes':2,'Miércoles':3,'Miercoles':3,'Jueves':4,'Viernes':5,'Sábado':6,'Sabado':6,'Domingo':0 };
+                    const dow = dowMap[c.dia] ?? null;
+                    if (dow !== null) {
+                        // crear evento recurrente simple (usando daysOfWeek)
+                        window.calendar.addEvent({
+                            title: c.nombre,
+                            daysOfWeek: [dow],
+                            startTime: c.hora_inicio || '08:00:00',
+                            endTime: c.hora_fin || '10:00:00',
+                            extendedProps: { curso_id: c.id }
+                        });
+                    }
+                }
+            });
+        }
+      } catch (err) {
+        console.error('cargarCursosProfesor error', err);
+      }
+    }
+
+    // Inicializar calendario con FullCalendar (mejor apariencia)
+    document.addEventListener('DOMContentLoaded', function() {
+      var calendarEl = document.getElementById('calendar');
+      window.calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        locale: 'es',
+        height: 560,
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'timeGridWeek,timeGridDay' },
+        allDaySlot: false,
+        slotMinTime: "06:00:00",
+        slotMaxTime: "22:00:00",
+        nowIndicator: true,
+        eventClick: function(info) {
+          // al hacer click en evento, abrir sección calificaciones para ese curso
+          const cursoId = info.event.extendedProps.curso_id;
+          if (cursoId) {
+            mostrarSeccion('calificaciones');
+            verAlumnosYCalificaciones(cursoId, info.event.title);
+          }
+        }
+      });
+      window.calendar.render();
+      // cargar datos
+      cargarCursosProfesor();
+    });
+
+    // Ver alumnos y mostrar tabla de calificaciones editable
+    async function verAlumnosYCalificaciones(cursoId, cursoNombre) {
+      mostrarSeccion('calificaciones');
+      const cont = document.getElementById('calificaciones');
+      cont.innerHTML = `<h3 class="text-danger mb-3">Gestión de Calificaciones — ${escapeHtml(cursoNombre || '')}</h3>
+                        <div id="calificacionesInner"><p>Cargando estudiantes...</p></div>`;
+      try {
+        const res = await fetch(`../php/coordinador_actions.php?action=list_estudiantes_curso&curso_id=${cursoId}`, { cache: 'no-store' });
+        const j = await res.json();
+        if (!j.success) {
+          document.getElementById('calificacionesInner').innerHTML = '<div class="alert alert-danger">Error al cargar estudiantes.</div>';
+          return;
+        }
+        const rows = j.data || [];
+        const html = ['<table class="table table-striped"><thead><tr><th>#</th><th>Estudiante</th><th>Documento</th><th>Nota</th><th>Acción</th></tr></thead><tbody>'];
+        rows.forEach((s, idx) => {
+            const notaVal = (s.nota !== null && s.nota !== undefined) ? s.nota : '';
+            html.push(`<tr>
+                <td>${idx+1}</td>
+                <td>${escapeHtml(s.nombre || '')}</td>
+                <td>${escapeHtml(s.documento || '')}</td>
+                <td><input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm" id="nota_${s.estudiante_id}" value="${notaVal}"></td>
+                <td><button class="btn btn-sm btn-success" onclick="guardarNota(${cursoId}, ${s.estudiante_id})">Guardar</button></td>
+            </tr>`);
+        });
+        html.push('</tbody></table>');
+        document.getElementById('calificacionesInner').innerHTML = html.join('');
+      } catch (err) {
+        console.error('verAlumnosYCalificaciones error', err);
+        document.getElementById('calificacionesInner').innerHTML = '<div class="alert alert-danger">Error de conexión.</div>';
+      }
+    }
+
+    // Guardar nota
+    async function guardarNota(cursoId, estudianteId) {
+      const input = document.getElementById('nota_' + estudianteId);
+      const val = input ? input.value.trim() : '';
+      const fd = new FormData();
+      fd.append('action', 'guardar_nota');
+      fd.append('curso_id', cursoId);
+      fd.append('estudiante_id', estudianteId);
+      fd.append('nota', val);
+      try {
+        const res = await fetch('../php/coordinador_actions.php', { method: 'POST', body: fd });
+        const j = await res.json();
+        if (j.success) {
+          alert('Nota guardada.');
+        } else {
+          alert('No se pudo guardar la nota: ' + (j.message || 'error'));
+          console.warn('guardar_nota', j);
+        }
+      } catch (err) {
+        console.error('guardarNota error', err);
+        alert('Error de conexión al guardar.');
+      }
+    }
+
+    // Abrir formulario de reporte para el curso
+    function abrirReporte(cursoId, cursoNombre) {
+      mostrarSeccion('reportes');
+      const cont = document.getElementById('reportes');
+      cont.innerHTML = `<h3 class="text-danger mb-3">Reportes — ${escapeHtml(cursoNombre || '')}</h3>
+        <div><label>Tipo de reporte</label>
+          <select id="reporteTipo" class="form-select" style="max-width:320px;">
+            <option value="inasistencias">Acumulación de inasistencias</option>
+            <option value="notas">Reporte de notas</option>
+            <option value="otro">Otro</option>
+          </select></div>
+        <div style="margin-top:10px;">
+          <label>Contenido</label>
+          <textarea id="reporteContenido" class="form-control" style="min-height:120px;"></textarea>
+        </div>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary" onclick="enviarReporte(${cursoId})">Enviar reporte al coordinador</button>
+        </div>
+        <div id="reporteFeedback" style="margin-top:10px;"></div>`;
+    }
+
+    // Enviar reporte al backend
+    async function enviarReporte(cursoId) {
+      const tipo = document.getElementById('reporteTipo').value;
+      const contenido = document.getElementById('reporteContenido').value.trim();
+      if (!contenido) { alert('Escriba el contenido del reporte'); return; }
+      const fd = new FormData();
+      fd.append('action','enviar_reporte_coordinador');
+      fd.append('curso_id', cursoId);
+      fd.append('tipo', tipo);
+      fd.append('contenido', contenido);
+      fd.append('enviado_por', CURRENT_PROF_ID);
+      try {
+        const res = await fetch('../php/coordinador_actions.php', { method: 'POST', body: fd });
+        const j = await res.json();
+        const fb = document.getElementById('reporteFeedback');
+        if (j.success) {
+          fb.innerHTML = '<div class="alert alert-success">Reporte enviado correctamente.</div>';
+        } else {
+          fb.innerHTML = '<div class="alert alert-danger">Error al enviar el reporte.</div>';
+          console.warn('enviar_reporte_coordinador', j);
+        }
+      } catch (err) {
+        console.error('enviarReporte error', err);
+        alert('Error de conexión al enviar reporte.');
+      }
+    }
+
+    // escape helper
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    // Método cerrar sesión actualizado
     function cerrarSesion() {
+      localStorage.removeItem('currentUserId');
+      localStorage.removeItem('currentUserName');
       window.location.href = '../index.html';
     }
   </script>
-  <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    var calendarEl = document.getElementById('calendar');
-
-    var calendar = new FullCalendar.Calendar(calendarEl, {
-      initialView: 'dayGridMonth', // Vista mensual
-      locale: 'es', // Español
-      height: 500,
-      headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: 'dayGridMonth,timeGridWeek'
-      },
-      events: [
-        {
-          title: 'Clase de Programación',
-          start: '2025-09-08T10:00:00',
-          end: '2025-09-08T12:00:00'
-        },
-        {
-          title: 'Ética Profesional',
-          start: '2025-09-10T08:00:00',
-          end: '2025-09-10T10:00:00'
-        },
-        {
-          title: 'Álgebra Lineal',
-          start: '2025-09-09T14:00:00',
-          end: '2025-09-09T16:00:00'
-        }
-      ]
-    });
-
-    calendar.render();
-  });
-</script>
 
 </body>
 </html>

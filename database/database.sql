@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS cursos (
     profesor_id INT NOT NULL,
     linea_enfasis_id INT NOT NULL,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dia VARCHAR(32) NULL,
+    hora_inicio TIME NULL,
+    hora_fin TIME NULL,
     FOREIGN KEY (profesor_id) REFERENCES usuarios(id) ON DELETE RESTRICT ON UPDATE CASCADE,
     FOREIGN KEY (linea_enfasis_id) REFERENCES lineas_enfasis(id) ON DELETE RESTRICT ON UPDATE CASCADE
 );
@@ -50,20 +53,14 @@ CREATE TABLE IF NOT EXISTS solicitudes (
     descripcion TEXT,
     estado ENUM('pendiente','aprobada','rechazada') DEFAULT 'pendiente',
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    aprobador_id INT NULL,
+    comentario_coordinador TEXT NULL,
+    fecha_procesamiento TIMESTAMP NULL,
+    linea_enfasis_id INT NULL,
     FOREIGN KEY (remitente_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-    FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE SET NULL
+    FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE SET NULL,
+    FOREIGN KEY (aprobador_id) REFERENCES usuarios(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
-
--- Agregar campos para registrar quién procesa la solicitud y el comentario del coordinador
-ALTER TABLE solicitudes
-  ADD COLUMN IF NOT EXISTS aprobador_id INT NULL AFTER estado,
-  ADD COLUMN IF NOT EXISTS comentario_coordinador TEXT NULL AFTER descripcion,
-  ADD COLUMN IF NOT EXISTS fecha_procesamiento TIMESTAMP NULL AFTER fecha;
-
--- Crear FK opcional hacia usuarios para aprobador (si la tabla usuarios existe)
-ALTER TABLE solicitudes
-  ADD CONSTRAINT IF NOT EXISTS fk_solicitudes_aprobador
-  FOREIGN KEY (aprobador_id) REFERENCES usuarios(id) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Cursos de ejemplo (Robótica) - requiere que existan usuarios con documento '2001'
 DELETE FROM cursos WHERE codigo IN ('ARD101','ROB201');
@@ -190,9 +187,72 @@ UPDATE lineas_enfasis SET duracion = '4 semestres', creditos = 18, cupos = 25 WH
 UPDATE lineas_enfasis SET duracion = '4 semestres', creditos = 20, cupos = 30 WHERE nombre = 'Big Data';
 UPDATE lineas_enfasis SET duracion = '4 semestres', creditos = 16, cupos = 40 WHERE nombre = 'Gestión de la Información y el Conocimiento';
 
--- Asegurar columna para solicitudes de inscripción a línea de énfasis
-ALTER TABLE solicitudes
-  ADD COLUMN IF NOT EXISTS linea_enfasis_id INT NULL AFTER curso_id;
+-- Asegurar columnas de horario en cursos: día y hora_inicio / hora_fin (si no existen)
+ALTER TABLE cursos
+  ADD COLUMN IF NOT EXISTS dia VARCHAR(32) NULL AFTER semestre,
+  ADD COLUMN IF NOT EXISTS hora_inicio TIME NULL AFTER dia,
+  ADD COLUMN IF NOT EXISTS hora_fin TIME NULL AFTER hora_inicio;
 
--- En caso de MySQL que no soporte IF NOT EXISTS:
--- ALTER TABLE solicitudes ADD COLUMN linea_enfasis_id INT NULL;
+-- Tabla calificaciones: una entrada por curso + estudiante (actualizable)
+CREATE TABLE IF NOT EXISTS calificaciones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    curso_id INT NOT NULL,
+    estudiante_id INT NOT NULL,
+    nota DECIMAL(5,2) DEFAULT NULL,
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE,
+    FOREIGN KEY (estudiante_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    UNIQUE KEY ux_curso_estudiante (curso_id, estudiante_id)
+);
+
+-- Tabla asistencias / reportes de inasistencia
+CREATE TABLE IF NOT EXISTS asistencias (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    curso_id INT NOT NULL,
+    estudiante_id INT NOT NULL,
+    fecha DATE NOT NULL,
+    falta TINYINT(1) DEFAULT 1,
+    motivo TEXT NULL,
+    reportado_por INT NULL, -- id del profesor que reporta
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE,
+    FOREIGN KEY (estudiante_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (reportado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+-- Tabla para reportes formales al coordinador (simplificada)
+CREATE TABLE IF NOT EXISTS reportes_coordinador (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    curso_id INT NOT NULL,
+    tipo ENUM('inasistencias','notas','otro') NOT NULL,
+    contenido TEXT NOT NULL,
+    enviado_por INT NOT NULL,
+    fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    procesado TINYINT(1) DEFAULT 0,
+    FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE,
+    FOREIGN KEY (enviado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+-- Añadir curso Cálculo Diferencial (CLD002) asignado al profesor con documento '3001' y a la línea Ingeniería de Software
+INSERT IGNORE INTO cursos (nombre, codigo, semestre, profesor_id, linea_enfasis_id, dia, hora_inicio, hora_fin)
+SELECT 'Cálculo Diferencial', 'CLD002', '2024-1', u.id, le.id, 'Lunes', '10:00:00', '12:00:00'
+FROM usuarios u
+JOIN lineas_enfasis le ON le.nombre = 'Ingeniería de Software'
+WHERE u.documento = '3001'
+LIMIT 1;
+
+-- Asegurar que el estudiante con documento '2001' esté inscrito en la misma línea (si no existe)
+INSERT IGNORE INTO inscripciones (usuario_id, linea_enfasis_id, estado)
+SELECT u.id, le.id, 'confirmada'
+FROM usuarios u
+JOIN lineas_enfasis le ON le.nombre = 'Ingeniería de Software'
+WHERE u.documento = '2001'
+ON DUPLICATE KEY UPDATE fecha = VALUES(fecha);
+
+-- Insertar calificación inicial para la estudiante '2001' en el curso CLD002 (nota de ejemplo 85)
+INSERT IGNORE INTO calificaciones (curso_id, estudiante_id, nota)
+SELECT c.id, u.id, 85
+FROM cursos c
+JOIN usuarios u ON u.documento = '2001'
+WHERE c.codigo = 'CLD002'
+LIMIT 1;

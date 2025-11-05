@@ -400,4 +400,92 @@ tr:hover {
 	line-height: 1.45;
 }
 
-/* ...existing code... */
+/* Modal overlay y tarjeta */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.48);
+    z-index: 3000;
+    padding: 20px;
+}
+
+.modal-card {
+    background: #fff;
+    border-radius: 12px;
+    max-width: 780px;
+    width: 100%;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.18);
+    overflow: hidden;
+}
+
+/* Cabecera modal */
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.modal-header h3 { flex: 1; font-size: 1.15rem; color:#222; margin:0; }
+
+/* Botones de cabecera: flecha atrás y cerrar */
+.modal-back, .modal-close {
+    background: #fff;
+    border: 1px solid #eee;
+    color: #c41e3a;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    transition: background 0.14s, transform 0.12s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.modal-back:hover, .modal-close:hover {
+    background: #faf0f1;
+    transform: translateY(-1px);
+}
+
+/* Modal body */
+.modal-body {
+    padding: 18px;
+    color: #333;
+    line-height: 1.5;
+}
+
+/* Acción submit estilo más llamativo */
+.action-submit {
+    background-color: #197b30;
+    color: #fff;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.action-submit:hover { background-color: #145e24; }
+
+/* Botones cancelar/rechazar */
+.action-cancel {
+    background: #fff5f6;
+    color: #c4303a;
+    border: 1px solid #f1d0d3;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.action-cancel:hover { background: #fbecec; }
+
+/* Mejor separación en vistas pequeñas */
+@media (max-width: 900px) {
+    .modal-card { max-width: 92%; }
+    .modal-header { padding: 12px; }
+    .modal-body { padding: 12px; }
+}

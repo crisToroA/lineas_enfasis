@@ -295,8 +295,8 @@ try {
 	    $solicitud_id = intval($_POST['solicitud_id'] ?? 0);
 	    $estado = $_POST['estado'] ?? '';
 	    $comentario = trim($_POST['comentario'] ?? '');
-	    // opcional: quien procesa (si no hay autenticación se puede enviar desde frontend)
 	    $aprobador_id = intval($_POST['aprobador_id'] ?? 0);
+
 	    if (!in_array($estado, ['aprobada', 'rechazada'])) {
 	        echo json_encode(['success' => false, 'message' => 'Estado inválido']);
 	        exit;
@@ -306,49 +306,88 @@ try {
 	        exit;
 	    }
 
-	    $sql = "UPDATE solicitudes SET estado = ?, comentario_coordinador = ?, aprobador_id = ?, fecha_procesamiento = NOW() WHERE id = ?";
-	    $stmt = $conn->prepare($sql);
-	    if ($stmt === false) {
-	        echo json_encode(['success' => false, 'message' => 'Error de preparación SQL.']);
-	        exit;
-	    }
-	    // si aprobador_id es 0, bindarlo como NULL: usar nullificación manual
-	    if ($aprobador_id > 0) {
-	        $stmt->bind_param('siii', $estado, $comentario, $aprobador_id, $solicitud_id);
-	    } else {
-	        // bind con aprobador_id = NULL -> pasar 0; la columna permite NULL y ON UPDATE/DELETE ya está definida
-	        $nullAprobador = null;
-	        // Para bind_param no se puede pasar NULL directo con tipo 'i', así que pasar 0 y dejar que la columna acepte (o adaptar según políticas)
-	        $stmt->bind_param('siii', $estado, $comentario, $aprobador_id, $solicitud_id);
-	    }
-	    $ok = $stmt->execute();
-	    // si se actualizó y fue aprobado, manejar efectos secundarios
-	    if ($ok && $estado === 'aprobada') {
-	        // obtener tipo y remitente y linea_enfasis_id
-	        $q2 = $conn->prepare("SELECT remitente_id, tipo, linea_enfasis_id FROM solicitudes WHERE id = ? LIMIT 1");
-	        $q2->bind_param('i', $solicitud_id);
-	        $q2->execute();
-	        $row = $q2->get_result()->fetch_assoc();
-	        if ($row && ($row['tipo'] ?? '') === 'Inscripción LE') {
-	            $usuario = intval($row['remitente_id']);
-	            $linea = intval($row['linea_enfasis_id'] ?? 0);
-	            if ($usuario > 0 && $linea > 0) {
-	                // insertar inscripción si no existe confirmada
-	                $check = $conn->prepare("SELECT id FROM inscripciones WHERE usuario_id = ? AND linea_enfasis_id = ? AND estado = 'confirmada' LIMIT 1");
-	                $check->bind_param('ii', $usuario, $linea);
-	                $check->execute();
-	                if ($check->get_result()->num_rows === 0) {
-	                    $ins = $conn->prepare("INSERT INTO inscripciones (usuario_id, linea_enfasis_id, estado) VALUES (?, ?, 'confirmada')");
-	                    if ($ins) {
-	                        $ins->bind_param('ii', $usuario, $linea);
-	                        $ins->execute();
+	    try {
+	        if ($aprobador_id > 0) {
+	            $sql = "UPDATE solicitudes SET estado = ?, comentario_coordinador = ?, aprobador_id = ?, fecha_procesamiento = NOW() WHERE id = ?";
+	            $stmt = $conn->prepare($sql);
+	            if ($stmt === false) {
+	                error_log('validar_solicitud prepare (with approver) failed: ' . $conn->error);
+	                http_response_code(500);
+	                echo json_encode(['success' => false, 'message' => 'Error interno al preparar consulta.', 'detail' => $conn->error]);
+	                exit;
+	            }
+	            $stmt->bind_param('siii', $estado, $comentario, $aprobador_id, $solicitud_id);
+	        } else {
+	            // usar NULL explícito para evitar violar FK con 0
+	            $sql = "UPDATE solicitudes SET estado = ?, comentario_coordinador = ?, aprobador_id = NULL, fecha_procesamiento = NOW() WHERE id = ?";
+	            $stmt = $conn->prepare($sql);
+	            if ($stmt === false) {
+	                error_log('validar_solicitud prepare (no approver) failed: ' . $conn->error);
+	                http_response_code(500);
+	                echo json_encode(['success' => false, 'message' => 'Error interno al preparar consulta.', 'detail' => $conn->error]);
+	                exit;
+	            }
+	            $stmt->bind_param('ssi', $estado, $comentario, $solicitud_id);
+	        }
+
+	        $execOk = $stmt->execute();
+	        if ($execOk === false) {
+	            $err = $stmt->error ?: $conn->error;
+	            error_log('validar_solicitud execute error: ' . $err . ' errno:' . $conn->errno);
+	            http_response_code(500);
+	            $resp = ['success' => false, 'message' => 'Error al actualizar la solicitud.'];
+	            if (!empty($DEBUG)) $resp['detail'] = substr($err,0,512);
+	            echo json_encode($resp);
+	            exit;
+	        }
+
+	        // verificar filas afectadas
+	        $affected = $stmt->affected_rows;
+	        $stmt->close();
+
+	        // si se aprobó, crear efectos secundarios (inscripción) - mantener este bloque existente
+	        if ($estado === 'aprobada') {
+	            $q2 = $conn->prepare("SELECT remitente_id, tipo, linea_enfasis_id FROM solicitudes WHERE id = ? LIMIT 1");
+	            if ($q2) {
+	                $q2->bind_param('i', $solicitud_id);
+	                $q2->execute();
+	                $row = $q2->get_result()->fetch_assoc();
+	                if ($row && ($row['tipo'] ?? '') === 'Inscripción LE') {
+	                    $usuario = intval($row['remitente_id']);
+	                    $linea = intval($row['linea_enfasis_id'] ?? 0);
+	                    if ($usuario > 0 && $linea > 0) {
+	                        $check = $conn->prepare("SELECT id FROM inscripciones WHERE usuario_id = ? AND linea_enfasis_id = ? AND estado = 'confirmada' LIMIT 1");
+	                        if ($check) {
+	                            $check->bind_param('ii', $usuario, $linea);
+	                            $check->execute();
+	                            if ($check->get_result()->num_rows === 0) {
+	                                $ins = $conn->prepare("INSERT INTO inscripciones (usuario_id, linea_enfasis_id, estado) VALUES (?, ?, 'confirmada')");
+	                                if ($ins) {
+	                                    $ins->bind_param('ii', $usuario, $linea);
+	                                    $ins->execute();
+	                                    $ins->close();
+	                                }
+	                            }
+	                            $check->close();
+	                        }
 	                    }
 	                }
+	                $q2->close();
+	            } else {
+	                error_log('validar_solicitud q2 prepare failed: ' . $conn->error);
 	            }
 	        }
+
+	        echo json_encode(['success' => true, 'affected_rows' => $affected]);
+	        exit;
+	    } catch (Exception $e) {
+	        error_log('validar_solicitud exception: ' . $e->getMessage());
+	        http_response_code(500);
+	        $resp = ['success' => false, 'message' => 'Error interno del servidor.'];
+	        if ($DEBUG) $resp['detail'] = $e->getMessage();
+	        echo json_encode($resp);
+	        exit;
 	    }
-	    echo json_encode(['success' => $ok]);
-	    exit;
 	}
 
 	// Nueva acción: listar solicitudes ya procesadas (seguimiento)
@@ -492,43 +531,157 @@ try {
 
 	// Acción: solicitar inscripción en una línea de énfasis (crea solicitud para que el coordinador la procese)
 	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'solicitar_inscripcion_linea') {
-	    $usuario_id = intval($_POST['usuario_id'] ?? 0);
-	    $linea_id = intval($_POST['linea_id'] ?? 0);
+	    try {
+	        $usuario_id = intval($_POST['usuario_id'] ?? 0);
+	        $linea_id = intval($_POST['linea_id'] ?? 0);
 
-	    if ($usuario_id <= 0 || $linea_id <= 0) {
-	        echo json_encode(['success' => false, 'message' => 'Datos inválidos.']);
+	        if ($usuario_id <= 0 || $linea_id <= 0) {
+	            echo json_encode(['success' => false, 'message' => 'Datos inválidos.']);
+	            exit;
+	        }
+
+	        // verificar usuario
+	        $v = $conn->prepare("SELECT id FROM usuarios WHERE id = ? LIMIT 1");
+	        if (!$v) {
+	            error_log('solicitar_inscripcion_linea prepare verificar usuario error: ' . $conn->error);
+	            http_response_code(500);
+	            $resp = ['success' => false, 'message' => 'Error interno al validar usuario.'];
+	            if ($DEBUG) $resp['detail'] = $conn->error;
+	            echo json_encode($resp);
+	            exit;
+	        }
+	        $v->bind_param('i', $usuario_id);
+	        $v->execute();
+	        if ($v->get_result()->num_rows === 0) {
+	            echo json_encode(['success' => false, 'message' => 'Usuario no encontrado.']);
+	            exit;
+	        }
+
+	        // verificar línea
+	        $v2 = $conn->prepare("SELECT id, nombre FROM lineas_enfasis WHERE id = ? LIMIT 1");
+	        if (!$v2) {
+	            error_log('solicitar_inscripcion_linea prepare verificar linea error: ' . $conn->error);
+	            http_response_code(500);
+	            $resp = ['success' => false, 'message' => 'Error interno al validar línea.'];
+	            if ($DEBUG) $resp['detail'] = $conn->error;
+	            echo json_encode($resp);
+	            exit;
+	        }
+	        $v2->bind_param('i', $linea_id);
+	        $v2->execute();
+	        $lineRow = $v2->get_result()->fetch_assoc();
+	        if (!$lineRow) {
+	            echo json_encode(['success' => false, 'message' => 'Línea no encontrada.']);
+	            exit;
+	        }
+
+	        // Comprobar si la columna linea_enfasis_id existe en la tabla solicitudes
+	        $colCheckRes = $conn->query("SHOW COLUMNS FROM solicitudes LIKE 'linea_enfasis_id'");
+	        $hasColumn = ($colCheckRes && $colCheckRes->num_rows > 0);
+
+	        // Preparar descripción legible
+	        $desc = "Solicitud de inscripción en línea de énfasis: " . ($lineRow['nombre'] ?? $linea_id) . " (id: {$linea_id})";
+
+	        if ($hasColumn) {
+	            // Intentar insertar incluyendo la columna linea_enfasis_id
+	            $ist = $conn->prepare("INSERT INTO solicitudes (remitente_id, curso_id, tipo, descripcion, linea_enfasis_id, estado) VALUES (?, NULL, 'Inscripción LE', ?, ?, 'pendiente')");
+	            if (!$ist) {
+	                $err = $conn->error;
+	                error_log('solicitar_inscripcion_linea prepare insertar (con columna) error: ' . $err);
+	                http_response_code(500);
+	                $resp = ['success' => false, 'message' => 'Error al crear la solicitud.'];
+	                if ($DEBUG) $resp['detail'] = $err;
+	                echo json_encode($resp);
+	                exit;
+	            }
+	            $ist->bind_param('isi', $usuario_id, $desc, $linea_id);
+	            $ok = $ist->execute();
+	            if ($ok) {
+	                echo json_encode(['success' => true, 'message' => 'Solicitud enviada al coordinador.', 'solicitud_id' => $conn->insert_id]);
+	            } else {
+	                $errMsg = $ist->error ?: $conn->error;
+	                error_log('solicitar_inscripcion_linea execute (con columna) error: ' . $errMsg . ' / errno: ' . $conn->errno);
+	                http_response_code(500);
+	                $resp = ['success' => false, 'message' => 'Error al crear la solicitud en la base de datos.'];
+	                if ($DEBUG) $resp['detail'] = substr($errMsg, 0, 512);
+	                else $resp['detail_code'] = 'DB_ERR_' . ($conn->errno ?: 'UNKNOWN');
+	                echo json_encode($resp);
+	            }
+	            exit;
+	        } else {
+	            // Si no existe la columna, insertar sin ella (guardando info de la línea en la descripción)
+	            $ist = $conn->prepare("INSERT INTO solicitudes (remitente_id, curso_id, tipo, descripcion, estado) VALUES (?, NULL, 'Inscripción LE', ?, 'pendiente')");
+	            if (!$ist) {
+	                $err = $conn->error;
+	                error_log('solicitar_inscripcion_linea prepare insertar (sin columna) error: ' . $err);
+	                http_response_code(500);
+	                $resp = ['success' => false, 'message' => 'Error al crear la solicitud (estructura antigua de BD).'];
+	                if ($DEBUG) $resp['detail'] = $err;
+	                echo json_encode($resp);
+	                exit;
+	            }
+	            $ist->bind_param('is', $usuario_id, $desc);
+	            $ok = $ist->execute();
+	            if ($ok) {
+	                echo json_encode(['success' => true, 'message' => 'Solicitud enviada al coordinador (sin enlace directo a la línea). El coordinador deberá asociarla manualmente.', 'solicitud_id' => $conn->insert_id ]);
+	            } else {
+	                $errMsg = $ist->error ?: $conn->error;
+	                error_log('solicitar_inscripcion_linea execute (sin columna) error: ' . $errMsg . ' / errno: ' . $conn->errno);
+	                http_response_code(500);
+	                $resp = ['success' => false, 'message' => 'Error al crear la solicitud en la base de datos.'];
+	                if ($DEBUG) $resp['detail'] = substr($errMsg, 0, 512);
+	                else $resp['detail_code'] = 'DB_ERR_' . ($conn->errno ?: 'UNKNOWN');
+	                echo json_encode($resp);
+	            }
+	            exit;
+	        }
+	    } catch (Exception $ex) {
+	        error_log('solicitar_inscripcion_linea exception: ' . $ex->getMessage());
+	        http_response_code(500);
+	        $resp = ['success' => false, 'message' => 'Error interno del servidor.'];
+	        if ($DEBUG) $resp['detail'] = $ex->getMessage();
+	        echo json_encode($resp);
 	        exit;
 	    }
+	}
 
-	    // verificar usuario
-	    $v = $conn->prepare("SELECT id FROM usuarios WHERE id = ? LIMIT 1");
-	    $v->bind_param('i', $usuario_id);
-	    $v->execute();
-	    if ($v->get_result()->num_rows === 0) {
-	        echo json_encode(['success' => false, 'message' => 'Usuario no encontrado.']);
+	// Nueva acción: obtener mis notas (estudiante)
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'mis_notas' && isset($_GET['usuario_id'])) {
+	    $uid = intval($_GET['usuario_id']);
+	    if ($uid <= 0) { echo json_encode(['success' => false, 'message' => 'ID de usuario inválido']); exit; }
+	    $sql = "SELECT cal.id AS calificacion_id, cal.nota,
+	                   c.id AS curso_id, c.nombre AS curso_nombre, c.codigo AS curso_codigo, c.semestre
+	            FROM calificaciones cal
+	            JOIN cursos c ON cal.curso_id = c.id
+	            WHERE cal.estudiante_id = ?
+	            ORDER BY c.semestre DESC, c.nombre ASC";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) { echo json_encode(['success'=>false,'message'=>'Error interno al preparar consulta','detail'=>$conn->error]); exit; }
+	    $stmt->bind_param('i', $uid);
+	    $stmt->execute();
+	    $res = $stmt->get_result();
+	    $out = [];
+	    while ($r = $res->fetch_assoc()) $out[] = $r;
+	    echo json_encode(['success'=>true,'data'=>$out]);
+	    exit;
+	}
+
+	// Nueva acción: listar solicitudes de un remitente (útil para verificar desde UI estudiante)
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'mis_solicitudes' && isset($_GET['usuario_id'])) {
+	    $uid = intval($_GET['usuario_id']);
+	    if ($uid <= 0) { echo json_encode(['success' => false, 'message' => 'ID inválido']); exit; }
+	    $sql = "SELECT id, tipo, descripcion, estado, fecha, linea_enfasis_id FROM solicitudes WHERE remitente_id = ? ORDER BY fecha DESC LIMIT 50";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) {
+	        echo json_encode(['success' => false, 'message' => 'Error interno al preparar consulta.']);
 	        exit;
 	    }
-
-	    // verificar línea
-	    $v2 = $conn->prepare("SELECT id FROM lineas_enfasis WHERE id = ? LIMIT 1");
-	    $v2->bind_param('i', $linea_id);
-	    $v2->execute();
-	    if ($v2->get_result()->num_rows === 0) {
-	        echo json_encode(['success' => false, 'message' => 'Línea no encontrada.']);
-	        exit;
-	    }
-
-	    // insertar solicitud
-	    $desc = "Solicitud de inscripción en línea de énfasis id: " . $linea_id;
-	    $ist = $conn->prepare("INSERT INTO solicitudes (remitente_id, curso_id, tipo, descripcion, linea_enfasis_id, estado) VALUES (?, NULL, 'Inscripción LE', ?, ?, 'pendiente')");
-	    if (!$ist) {
-	        error_log('solicitar_inscripcion_linea prepare failed: ' . $conn->error);
-	        echo json_encode(['success' => false, 'message' => 'Error al crear la solicitud.']);
-	        exit;
-	    }
-	    $ist->bind_param('isi', $usuario_id, $desc, $linea_id);
-	    $ok = $ist->execute();
-	    echo json_encode(['success' => $ok, 'message' => $ok ? 'Solicitud enviada al coordinador.' : 'Error al crear la solicitud.']);
+	    $stmt->bind_param('i', $uid);
+	    $stmt->execute();
+	    $res = $stmt->get_result();
+	    $list = [];
+	    while ($r = $res->fetch_assoc()) $list[] = $r;
+	    echo json_encode(['success' => true, 'data' => $list]);
 	    exit;
 	}
 
@@ -570,6 +723,149 @@ try {
 	    $cursos = [];
 	    while ($r = $res->fetch_assoc()) $cursos[] = $r;
 	    echo json_encode(['success' => true, 'data' => $cursos]);
+	    exit;
+	}
+
+	// Listar cursos asignados a un profesor (incluye dia y horario)
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list_mis_cursos_profesor' && isset($_GET['profesor_id'])) {
+	    $pid = intval($_GET['profesor_id']);
+	    if ($pid <= 0) { echo json_encode(['success' => false, 'message' => 'Profesor inválido']); exit; }
+	    $sql = "SELECT id, nombre, codigo, semestre, linea_enfasis_id, dia, hora_inicio, hora_fin FROM cursos WHERE profesor_id = ? ORDER BY semestre DESC, nombre ASC";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) { echo json_encode(['success'=>false,'message'=>'Error interno','detail'=>$conn->error]); exit; }
+	    $stmt->bind_param('i', $pid);
+	    $stmt->execute();
+	    $res = $stmt->get_result();
+	    $out = [];
+	    while ($r = $res->fetch_assoc()) $out[] = $r;
+	    echo json_encode(['success'=>true,'data'=>$out]);
+	    exit;
+	}
+
+	// Listar estudiantes inscritos en un curso y sus calificaciones (si existen)
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list_estudiantes_curso' && isset($_GET['curso_id'])) {
+	    $cid = intval($_GET['curso_id']);
+	    if ($cid <= 0) { echo json_encode(['success'=>false,'message'=>'Curso inválido']); exit; }
+	    $sql = "SELECT u.id AS estudiante_id, u.nombre, u.documento,
+	                   cals.nota
+	            FROM inscripciones ins
+	            JOIN usuarios u ON ins.usuario_id = u.id
+	            LEFT JOIN calificaciones cals ON cals.curso_id = ? AND cals.estudiante_id = u.id
+	            WHERE ins.linea_enfasis_id = (SELECT linea_enfasis_id FROM cursos WHERE id = ?) OR ins.usuario_id IN (
+	                  SELECT usuario_id FROM inscripciones WHERE linea_enfasis_id = (SELECT linea_enfasis_id FROM cursos WHERE id = ?)
+	            )
+	            /* Fallback simple: también listar inscripciones por curso en caso de existir relación explícita */
+	            ";
+	    // Simplificar: obtener estudiantes que estén inscritos en la misma línea o, si existen inscripciones por curso, obtenerlas
+	    // Ejecutar dos consultas: primero por inscripciones directas a inscripciones.linea_enfasis_id, si no hay, intentar otras fuentes.
+	    try {
+	        // Intento: obtener estudiantes relacionados por línea_enfasis
+	        $q1 = $conn->prepare("SELECT le.id FROM cursos c JOIN lineas_enfasis le ON c.linea_enfasis_id = le.id WHERE c.id = ? LIMIT 1");
+	        $q1->bind_param('i', $cid);
+	        $q1->execute();
+	        $lr = $q1->get_result()->fetch_assoc();
+	        $linea_id = intval($lr['id'] ?? 0);
+	        $students = [];
+	        if ($linea_id > 0) {
+	            $s1 = $conn->prepare("SELECT u.id AS estudiante_id, u.nombre, u.documento, cals.nota
+	                                  FROM inscripciones ins
+	                                  JOIN usuarios u ON ins.usuario_id = u.id
+	                                  LEFT JOIN calificaciones cals ON cals.curso_id = ? AND cals.estudiante_id = u.id
+	                                  WHERE ins.linea_enfasis_id = ?
+	                                  ORDER BY u.nombre ASC");
+	            $s1->bind_param('ii', $cid, $linea_id);
+	            $s1->execute();
+	            $res = $s1->get_result();
+	            while ($r = $res->fetch_assoc()) $students[] = $r;
+	        }
+	        // Si no hay estudiantes por linea, intentar por inscripciones directas relacionadas al curso (si aplica)
+	        if (empty($students)) {
+	            $s2 = $conn->prepare("SELECT u.id AS estudiante_id, u.nombre, u.documento, cals.nota
+	                                  FROM usuarios u
+	                                  LEFT JOIN calificaciones cals ON cals.curso_id = ? AND cals.estudiante_id = u.id
+	                                  WHERE u.rol = 'estudiante'
+	                                  ORDER BY u.nombre ASC
+	                                  LIMIT 200");
+	            $s2->bind_param('i', $cid);
+	            $s2->execute();
+	            $res2 = $s2->get_result();
+	            while ($r = $res2->fetch_assoc()) $students[] = $r;
+	        }
+	        echo json_encode(['success'=>true,'data'=>$students]);
+	    } catch (Exception $e) {
+	        error_log('list_estudiantes_curso exception: ' . $e->getMessage());
+	        echo json_encode(['success'=>false,'message'=>'Error interno','detail'=>$e->getMessage()]);
+	    }
+	    exit;
+	}
+
+	// Guardar o actualizar una nota para un estudiante en un curso
+	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nota') {
+	    $curso_id = intval($_POST['curso_id'] ?? 0);
+	    $estudiante_id = intval($_POST['estudiante_id'] ?? 0);
+	    $nota = $_POST['nota'] ?? null;
+	    if ($curso_id <= 0 || $estudiante_id <= 0) { echo json_encode(['success'=>false,'message'=>'Datos inválidos']); exit; }
+	    // normalizar nota
+	    $nota_val = is_numeric($nota) ? floatval($nota) : null;
+	    try {
+	        // usar INSERT ... ON DUPLICATE KEY UPDATE (calificaciones tiene unique)
+	        $stmt = $conn->prepare("INSERT INTO calificaciones (curso_id, estudiante_id, nota) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE nota = VALUES(nota), fecha_actualizacion = NOW()");
+	        if (!$stmt) { error_log('guardar_nota prepare: ' . $conn->error); echo json_encode(['success'=>false,'message'=>'Error interno']); exit; }
+	        // permitir NULL para nota: bind_param requiere tipos; usar 'd' para decimal y pasar null como null_value handling
+	        if ($nota_val === null) {
+	            $nullNota = null;
+	            $stmt->bind_param('iid', $curso_id, $estudiante_id, $nota_val);
+	        } else {
+	            $stmt->bind_param('iid', $curso_id, $estudiante_id, $nota_val);
+	        }
+	        $ok = $stmt->execute();
+	        if ($ok) echo json_encode(['success'=>true]);
+	        else echo json_encode(['success'=>false,'message'=>$stmt->error]);
+	    } catch (Exception $e) {
+	        error_log('guardar_nota exception: ' . $e->getMessage());
+	        echo json_encode(['success'=>false,'message'=>'Error interno']);
+	    }
+	    exit;
+	}
+
+	// Registrar inasistencia / reportar falta
+	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'registrar_inasistencia') {
+	    $curso_id = intval($_POST['curso_id'] ?? 0);
+	    $estudiante_id = intval($_POST['estudiante_id'] ?? 0);
+	    $fecha = $_POST['fecha'] ?? null;
+	    $motivo = trim($_POST['motivo'] ?? '');
+	    $reportado_por = intval($_POST['reportado_por'] ?? 0);
+	    if ($curso_id <= 0 || $estudiante_id <= 0 || !$fecha) { echo json_encode(['success'=>false,'message'=>'Datos inválidos']); exit; }
+	    try {
+	        $stmt = $conn->prepare("INSERT INTO asistencias (curso_id, estudiante_id, fecha, falta, motivo, reportado_por) VALUES (?, ?, ?, 1, ?, ?)");
+	        if (!$stmt) { error_log('registrar_inasistencia prepare: ' . $conn->error); echo json_encode(['success'=>false,'message'=>'Error interno']); exit; }
+	        $stmt->bind_param('iissi', $curso_id, $estudiante_id, $fecha, $motivo, $reportado_por);
+	        $ok = $stmt->execute();
+	        echo json_encode(['success'=> (bool)$ok]);
+	    } catch (Exception $e) {
+	        error_log('registrar_inasistencia exception: ' . $e->getMessage());
+	        echo json_encode(['success'=>false,'message'=>'Error interno']);
+	    }
+	    exit;
+	}
+
+	// Enviar reporte formal al coordinador (inasistencias/ notas u otro)
+	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'enviar_reporte_coordinador') {
+	    $curso_id = intval($_POST['curso_id'] ?? 0);
+	    $tipo = $_POST['tipo'] ?? 'otro';
+	    $contenido = trim($_POST['contenido'] ?? '');
+	    $enviado_por = intval($_POST['enviado_por'] ?? 0);
+	    if ($curso_id <= 0 || !$contenido || $enviado_por <= 0) { echo json_encode(['success'=>false,'message'=>'Datos inválidos']); exit; }
+	    try {
+	        $stmt = $conn->prepare("INSERT INTO reportes_coordinador (curso_id, tipo, contenido, enviado_por) VALUES (?, ?, ?, ?)");
+	        if (!$stmt) { error_log('enviar_reporte_coordinador prepare: ' . $conn->error); echo json_encode(['success'=>false,'message'=>'Error interno']); exit; }
+	        $stmt->bind_param('issi', $curso_id, $tipo, $contenido, $enviado_por);
+	        $ok = $stmt->execute();
+	        echo json_encode(['success'=> (bool)$ok]);
+	    } catch (Exception $e) {
+	        error_log('enviar_reporte_coordinador exception: ' . $e->getMessage());
+	        echo json_encode(['success'=>false,'message'=>'Error interno']);
+	    }
 	    exit;
 	}
 

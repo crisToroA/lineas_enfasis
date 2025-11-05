@@ -171,9 +171,11 @@
 	<div id="modalDetalleSolicitud" class="modal-overlay" style="display:none;">
 		<div class="modal-card">
 			<div class="modal-header">
-				<button id="modalBack" class="modal-back" title="Volver" style="display:none;">←</button>
+				<!-- la flecha atrás: ahora button type=button y aria -->
+				<button id="modalBack" class="modal-back" type="button" aria-label="Volver" style="display:none;">←</button>
 				<h3 id="modalTitle" style="margin:0;">Detalle de Solicitud</h3>
-				<button onclick="cerrarModalDetalle()" class="modal-close" title="Cerrar">✕</button>
+				<!-- cerrar: button type=button -->
+				<button id="modalClose" class="modal-close" type="button" aria-label="Cerrar">✕</button>
 			</div>
 
 			<!-- Vista: Detalles -->
@@ -192,8 +194,8 @@
 				</div>
 
 				<div style="display:flex;gap:12px;margin-top:16px;">
-					<button id="btnAprobar" class="btn-action btn-aprobar">Aprobar</button>
-					<button id="btnRechazar" class="btn-action btn-rechazar">Rechazar</button>
+					<button id="btnAprobar" class="btn-action btn-aprobar" type="button">Aprobar</button>
+					<button id="btnRechazar" class="btn-action btn-rechazar" type="button">Rechazar</button>
 				</div>
 			</div>
 
@@ -204,14 +206,27 @@
 				<textarea id="actionComment" style="width:100%;min-height:140px;padding:8px;margin-top:8px;border:1px solid #ddd;border-radius:6px;"></textarea>
 
 				<div style="display:flex;gap:12px;margin-top:12px;">
-					<button id="submitActionBtn" class="btn-action btn-aprobar action-submit">Enviar y Aprobar</button>
-					<button id="cancelActionBtn" class="btn-action btn-rechazar action-cancel">Cancelar</button>
+					<button id="submitActionBtn" class="btn-action btn-aprobar action-submit" type="button">Enviar y Aprobar</button>
+					<button id="cancelActionBtn" class="btn-action btn-rechazar action-cancel" type="button">Cancelar</button>
 				</div>
 			</div>
 		</div>
 	</div>
 
     <script>
+        // Añadido: variables globales necesarias
+        var _currentSolicitudId = null;
+        var _currentAccion = null;
+        var CURRENT_USER_ID = parseInt(localStorage.getItem('currentUserId') || 0, 10);
+
+        function cerrarSesion() {
+            // redirige a la página de inicio (y limpia sesión local)
+            localStorage.removeItem('currentUserId');
+            localStorage.removeItem('currentUserName');
+            window.location.href = '../index.html';
+        }
+
+        // Reemplazo de showSection para no depender de event.target (evita errores JS que cancelan listeners)
         function showSection(sectionId) {
             // Hide all sections
             var sections = document.querySelectorAll('.content-section');
@@ -228,8 +243,14 @@
             // Show selected section
             document.getElementById(sectionId).classList.add('active');
 
-            // Add active class to clicked tab
-            event.target.classList.add('active');
+            // Activar la pestaña correspondiente según sectionId (mapeo explícito)
+            if (sectionId === 'registrar') {
+                document.querySelector('.nav-tab:nth-child(1)').classList.add('active');
+            } else if (sectionId === 'validar') {
+                document.querySelector('.nav-tab:nth-child(2)').classList.add('active');
+            } else if (sectionId === 'seguimiento') {
+                document.querySelector('.nav-tab:nth-child(3)').classList.add('active');
+            }
         }
 
         // Util: parsear respuesta segura
@@ -426,7 +447,7 @@ document.getElementById('registroCursoForm').addEventListener('submit', async fu
                 mostrarRegistroFeedback('Solicitud procesada exitosamente.', true);
                 cerrarModalDetalle();
                 cargarSolicitudes();
-                cargarSeguimiento();
+                if (typeof cargarSeguimiento === 'function') cargarSeguimiento();
             } else {
                 mostrarRegistroFeedback('No se pudo procesar la solicitud.', false);
             }
@@ -522,6 +543,37 @@ document.getElementById('registroCursoForm').addEventListener('submit', async fu
 		}
 	}
 
+    // Añadir función para cargar las solicitudes procesadas (seguimiento)
+    async function cargarSeguimiento() {
+        const cont = document.getElementById('listaSeguimiento');
+        if (!cont) return;
+        cont.innerHTML = '<p style="color:#666;">Cargando seguimiento...</p>';
+        try {
+            const res = await fetch('../php/coordinador_actions.php?action=list_solicitudes_procesadas', { cache: 'no-store' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) {
+                cont.innerHTML = '<p>No hay solicitudes procesadas aún.</p>';
+                return;
+            }
+            // render sencillo
+            cont.innerHTML = '';
+            data.forEach(s => {
+                const d = document.createElement('div');
+                d.style.padding = '12px';
+                d.style.borderBottom = '1px solid #f0f0f0';
+                d.innerHTML = `<b>#${s.id}</b> — ${s.tipo} — <i>${s.estado}</i> — ${s.fecha_procesamiento || s.fecha || '-'}
+                               <div style="color:#444;margin-top:6px;">${s.descripcion || ''}</div>
+                               <div style="color:#444;margin-top:6px;"><b>Respuesta:</b> ${s.comentario_coordinador ? s.comentario_coordinador : '<span style="color:#888">(sin comentario)</span>'}</div>
+                               <div style="margin-top:8px;"><small>Aprobado por: ${s.aprobador_nombre || '—'}</small></div>`;
+                cont.appendChild(d);
+            });
+        } catch (err) {
+            console.error('cargarSeguimiento error', err);
+            cont.innerHTML = '<p style="color:#c00;">Error al cargar seguimiento.</p>';
+        }
+    }
+
     // Ejecutar cargas al DOMContentLoaded para asegurar que los elementos existen
     document.addEventListener('DOMContentLoaded', function() {
 		// Diagnóstico simple de BD: invoca action=diagnose_db y muestra resultado
@@ -556,21 +608,101 @@ document.getElementById('registroCursoForm').addEventListener('submit', async fu
 		if (typeof cargarSolicitudes === 'function') cargarSolicitudes();
 		if (typeof cargarProfesores === 'function') cargarProfesores();
 		if (typeof cargarLineasEnfasis === 'function') cargarLineasEnfasis();
-		if (typeof cargarSeguimiento === 'function') cargarSeguimiento();
-	});
+		if (typeof cargarSeguimiento === 'function') cargarSeguimiento(); // cargar seguimiento al inicio
 
-    // Agregado: función global de cierre de sesión (limpia localStorage y redirige al index)
-    function cerrarSesion() {
-        try {
-            localStorage.removeItem('currentUserId');
-            localStorage.removeItem('currentUserName');
-            // añadir otras claves si se usan
-        } catch (e) {
-            console.warn('Error limpiando storage en cerrarSesion', e);
+        // mostrar feedback sencillo (usa #registroFeedback si existe)
+        function mostrarRegistroFeedback(msg, ok) {
+            const el = document.getElementById('registroFeedback');
+            if (el) {
+                el.style.display = 'block';
+                el.textContent = msg;
+                el.style.color = ok ? '#155724' : '#721c24';
+                el.style.background = ok ? '#e6f4ea' : '#fbecec';
+                setTimeout(() => { el.style.display = 'none'; }, ok ? 3000 : 6000);
+            } else {
+                alert(msg);
+            }
         }
-        // redirigir al index (ruta relativa desde /dashboards)
-        window.location.href = '../index.html';
-    }
+
+        // Registrar listeners del modal aquí (se asegura que los elementos existen)
+        const modalBack = document.getElementById('modalBack');
+        const modalClose = document.getElementById('modalClose');
+        const cancelActionBtn = document.getElementById('cancelActionBtn');
+        const submitActionBtn = document.getElementById('submitActionBtn');
+
+        if (modalBack) {
+            modalBack.addEventListener('click', () => {
+                document.getElementById('modalAction').style.display = 'none';
+                document.getElementById('modalDetails').style.display = 'block';
+                modalBack.style.display = 'none';
+            });
+        }
+
+        if (modalClose) {
+            modalClose.addEventListener('click', () => {
+                cerrarModalDetalle();
+            });
+        }
+
+        if (cancelActionBtn) {
+            cancelActionBtn.addEventListener('click', () => {
+                document.getElementById('actionComment').value = '';
+                document.getElementById('modalAction').style.display = 'none';
+                document.getElementById('modalDetails').style.display = 'block';
+                if (modalBack) modalBack.style.display = 'none';
+            });
+        }
+
+        if (submitActionBtn) {
+            submitActionBtn.addEventListener('click', async () => {
+                const comentario = document.getElementById('actionComment').value.trim();
+                if (!comentario) {
+                    alert('Por favor escriba un comentario antes de continuar.');
+                    return;
+                }
+                if (!_currentSolicitudId || !_currentAccion) {
+                    alert('Solicitud o acción inválida.');
+                    return;
+                }
+                try {
+                    const fd = new FormData();
+                    fd.append('action', 'validar_solicitud');
+                    fd.append('solicitud_id', _currentSolicitudId);
+                    fd.append('estado', _currentAccion);
+                    fd.append('comentario', comentario);
+                    // añadir aprobador_id si está en sesión (mejora para auditoría)
+                    if (CURRENT_USER_ID && CURRENT_USER_ID > 0) fd.append('aprobador_id', CURRENT_USER_ID);
+
+                    const respRaw = await fetch('../php/coordinador_actions.php', { method: 'POST', body: fd });
+                    const txt = await respRaw.text();
+                    let resp;
+                    try { resp = JSON.parse(txt); } catch (e) {
+                        console.error('Respuesta inválida del servidor:', txt);
+                        mostrarRegistroFeedback('Respuesta inválida del servidor. Revisa la consola.', false);
+                        return;
+                    }
+
+                    console.log('validar_solicitud response', respRaw.status, resp);
+
+                    if (respRaw.ok && resp && resp.success) {
+                        mostrarRegistroFeedback('Solicitud procesada exitosamente.', true);
+                        // actualizar vistas: pendientes + seguimiento
+                        if (typeof cargarSolicitudes === 'function') cargarSolicitudes();
+                        if (typeof cargarSeguimiento === 'function') cargarSeguimiento();
+                        // cerrar modal al final
+                        cerrarModalDetalle();
+                    } else {
+                        const detail = resp.detail || resp.detail_code || resp.message || 'Sin detalle';
+                        mostrarRegistroFeedback('No se pudo procesar la solicitud: ' + detail, false);
+                        // no cerrar modal para reintento
+                    }
+                } catch (err) {
+                    console.error('Error al enviar validación:', err);
+                    mostrarRegistroFeedback('Error al conectar con el servidor.', false);
+                }
+            });
+        }
+    });
     </script>
 
     <!-- Chatbot widget -->
