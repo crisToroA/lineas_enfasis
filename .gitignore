@@ -1,6 +1,0 @@
-# Configuración privada (no almacenar claves en el repo)
-php/config.php
-.env
-# node_modules, vendor, etc. (si aplica)
-node_modules/
-vendor/

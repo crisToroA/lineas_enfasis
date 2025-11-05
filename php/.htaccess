@@ -1,8 +1,0 @@
-# Evita que archivos de configuración sean descargables desde web
-<IfModule mod_authz_core.c>
-    Require all denied
-</IfModule>
-<IfModule !mod_authz_core.c>
-    Deny from all
-</IfModule>
-# Permitir ejecución de scripts si es necesario (según configuración del servidor)
