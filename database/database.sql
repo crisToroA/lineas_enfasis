@@ -13,7 +13,11 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Tabla de líneas de énfasis (debe existir antes de cursos)
 CREATE TABLE IF NOT EXISTS lineas_enfasis (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL UNIQUE
+    nombre VARCHAR(100) NOT NULL UNIQUE,
+    duracion VARCHAR(50) DEFAULT 'No especificado',   -- e.g. '2 semestres'
+    creditos INT DEFAULT 0,
+    cupos INT DEFAULT 0,
+    descripcion TEXT DEFAULT ''
 );
 
 -- Asegurar que existan las líneas de énfasis oficiales (no duplicar)
@@ -132,3 +136,63 @@ CREATE TABLE IF NOT EXISTS chat_history (
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
+
+-- Tabla para inscripciones de estudiantes en una línea de énfasis (opcional)
+CREATE TABLE IF NOT EXISTS inscripciones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    linea_enfasis_id INT NOT NULL,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    estado ENUM('pendiente','confirmada','cancelada') DEFAULT 'confirmada',
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (linea_enfasis_id) REFERENCES lineas_enfasis(id) ON DELETE CASCADE
+);
+
+-- Añadir estudiantes de ejemplo
+INSERT IGNORE INTO usuarios (documento, password, rol, nombre) VALUES
+('1001', MD5('est1001'), 'estudiante', 'Juan Pérez'),
+('2001', MD5('est2001'), 'estudiante', 'María López');
+
+-- Asegurar que la columna 'descripcion' exista (compatible con MySQL 8+ / MariaDB)
+ALTER TABLE lineas_enfasis
+  ADD COLUMN IF NOT EXISTS descripcion TEXT DEFAULT '' AFTER cupos;
+
+-- Si el servidor MySQL no soporta ADD COLUMN IF NOT EXISTS (versiones antiguas),
+-- puedes usar esta alternativa comentada (descomentar y ejecutar manualmente si hace falta):
+-- ALTER TABLE lineas_enfasis ADD COLUMN descripcion TEXT DEFAULT '';
+
+-- Actualizar descripciones (ejecutar después de asegurar la columna)
+UPDATE lineas_enfasis SET descripcion = 'La línea de énfasis en Big Data se centra en el análisis, procesamiento y gestión de grandes volúmenes de datos provenientes de diversas fuentes. Los estudiantes adquieren competencias en técnicas de almacenamiento distribuido, minería de datos, análisis estadístico y herramientas de visualización avanzada. Esta línea busca formar profesionales capaces de transformar los datos en información valiosa para la toma de decisiones estratégicas en sectores como la banca, la salud, el comercio electrónico, la industria y el gobierno.' WHERE nombre = 'Big Data';
+
+UPDATE lineas_enfasis SET descripcion = 'La línea de Inteligencia Artificial (IA) aborda el diseño e implementación de sistemas capaces de aprender, razonar y tomar decisiones de manera autónoma. Incluye temas como aprendizaje automático, redes neuronales, procesamiento de lenguaje natural, visión por computadora y agentes inteligentes. Los estudiantes desarrollan soluciones innovadoras aplicables a la automatización de procesos, la analítica predictiva, los asistentes virtuales, los sistemas de recomendación y otras aplicaciones emergentes de la IA.' WHERE nombre = 'Inteligencia Artificial';
+
+UPDATE lineas_enfasis SET descripcion = 'La línea de énfasis en Robótica combina los principios de la ingeniería de software, la electrónica y la mecánica para diseñar sistemas autónomos y colaborativos. Se estudian áreas como el control de movimiento, la percepción sensorial, la interacción humano-robot y la automatización industrial. Esta línea forma profesionales capaces de desarrollar robots para la industria, la medicina, la exploración o la asistencia social, promoviendo la integración de tecnologías inteligentes en entornos físicos.' WHERE nombre = 'Robótica';
+
+UPDATE lineas_enfasis SET descripcion = 'En la línea de Ingeniería de Software, los estudiantes se enfocan en el ciclo completo de desarrollo de sistemas informáticos: análisis, diseño, implementación, pruebas, despliegue y mantenimiento. Se promueven metodologías ágiles, principios de arquitectura de software, pruebas automatizadas, seguridad y calidad del software. El objetivo es formar ingenieros capaces de liderar proyectos tecnológicos, garantizando soluciones robustas, escalables y alineadas con las necesidades del cliente y las buenas prácticas de la industria.' WHERE nombre = 'Ingeniería de Software';
+
+UPDATE lineas_enfasis SET descripcion = 'La línea de Gestión de la Información y del Conocimiento se orienta a la administración estratégica de los recursos informacionales dentro de las organizaciones. Los estudiantes aprenden a diseñar sistemas de información que faciliten la captura, organización, almacenamiento y difusión del conocimiento. Se abordan temas como inteligencia de negocios, gestión documental, bases de datos, tecnologías de información organizacional y toma de decisiones basada en información. Esta línea prepara profesionales capaces de transformar los datos y el conocimiento en ventajas competitivas sostenibles.' WHERE nombre = 'Gestión de la Información y el Conocimiento';
+
+-- Asegurar columnas duracion / creditos / cupos
+ALTER TABLE lineas_enfasis
+  ADD COLUMN IF NOT EXISTS duracion VARCHAR(50) DEFAULT '4 semestres' AFTER nombre,
+  ADD COLUMN IF NOT EXISTS creditos INT DEFAULT 16 AFTER duracion,
+  ADD COLUMN IF NOT EXISTS cupos INT DEFAULT 30 AFTER creditos;
+
+-- Si tu versión de MySQL/MariaDB no soporta "ADD COLUMN IF NOT EXISTS", ejecuta manualmente:
+-- ALTER TABLE lineas_enfasis ADD COLUMN duracion VARCHAR(50) DEFAULT '4 semestres' AFTER nombre;
+-- ALTER TABLE lineas_enfasis ADD COLUMN creditos INT DEFAULT 16 AFTER duracion;
+-- ALTER TABLE lineas_enfasis ADD COLUMN cupos INT DEFAULT 30 AFTER creditos;
+
+-- Actualizar valores por línea (opcional, deja los que prefieras)
+UPDATE lineas_enfasis SET duracion = '4 semestres', creditos = 20, cupos = 40 WHERE nombre = 'Ingeniería de Software';
+UPDATE lineas_enfasis SET duracion = '4 semestres', creditos = 18, cupos = 30 WHERE nombre = 'Inteligencia Artificial';
+UPDATE lineas_enfasis SET duracion = '4 semestres', creditos = 18, cupos = 25 WHERE nombre = 'Robótica';
+UPDATE lineas_enfasis SET duracion = '4 semestres', creditos = 20, cupos = 30 WHERE nombre = 'Big Data';
+UPDATE lineas_enfasis SET duracion = '4 semestres', creditos = 16, cupos = 40 WHERE nombre = 'Gestión de la Información y el Conocimiento';
+
+-- Asegurar columna para solicitudes de inscripción a línea de énfasis
+ALTER TABLE solicitudes
+  ADD COLUMN IF NOT EXISTS linea_enfasis_id INT NULL AFTER curso_id;
+
+-- En caso de MySQL que no soporte IF NOT EXISTS:
+-- ALTER TABLE solicitudes ADD COLUMN linea_enfasis_id INT NULL;

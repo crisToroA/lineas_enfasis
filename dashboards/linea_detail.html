@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Detalle - Línea de Énfasis</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="../CSS/linea_detail.css">
+</head>
+<body>
+  <!-- Header: consistente con las demás páginas -->
+  <div class="header">
+    <img src="../IMG/logo.png" alt="Universidad de Medellín">
+    <div class="button">
+      <button onclick="cerrarSesion()">Cerrar Sesión</button>
+    </div>
+  </div>
+
+  <div class="page-wrap">
+    <div class="card page-card shadow-sm">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h2 id="titleLinea">Línea de Énfasis</h2>
+        <div><button onclick="window.history.back()" class="btn btn-outline-secondary">← Volver</button></div>
+      </div>
+
+      <div class="meta" style="margin-top:12px;">
+        <div><b>Duración:</b> <span id="duracion">-</span></div>
+        <div><b>Créditos:</b> <span id="creditos">-</span></div>
+        <div><b>Cupos:</b> <span id="cupos">-</span></div>
+      </div>
+
+      <hr style="margin:18px 0" />
+
+      <div id="descripcion" style="white-space:pre-wrap;line-height:1.5;color:#333;">Cargando descripción...</div>
+
+      <div class="actions">
+        <button id="btnInscribirme" class="btn btn-primary">Inscribirme ahora</button>
+        <button onclick="window.location.href='explorar_LE_estudiante.html'" class="btn btn-secondary">Volver a explorar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm modal simple (DOM insert) -->
+  <div id="confirmModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:2000;">
+    <div class="modal-card">
+      <h5>Revisar inscripción</h5>
+      <div id="resumenConfirm" style="margin-top:10px;color:#333;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <button id="cancelConfirm" class="btn btn-outline-secondary">Cerrar</button>
+        <button id="confirmEnroll" class="btn btn-success">Inscribirme</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Obtener id desde querystring
+    function getQueryParam(name) {
+      const params = new URLSearchParams(window.location.search);
+      return params.get(name);
+    }
+
+    const lineaId = parseInt(getQueryParam('id') || 0, 10);
+    const titleEl = document.getElementById('titleLinea');
+    const durEl = document.getElementById('duracion');
+    const credEl = document.getElementById('creditos');
+    const cupEl = document.getElementById('cupos');
+    const descEl = document.getElementById('descripcion');
+    const btnIns = document.getElementById('btnInscribirme');
+    const confirmModal = document.getElementById('confirmModal');
+    const resumenConfirm = document.getElementById('resumenConfirm');
+    const cancelConfirm = document.getElementById('cancelConfirm');
+    const confirmEnroll = document.getElementById('confirmEnroll');
+
+    if (!lineaId) {
+      titleEl.textContent = 'Línea no especificada';
+      descEl.textContent = 'ID de línea inválido.';
+      btnIns.disabled = true;
+    } else {
+      cargarDetalle(lineaId);
+    }
+
+    async function cargarDetalle(id) {
+      try {
+        const res = await fetch('../php/coordinador_actions.php?action=get_linea_detail&id=' + encodeURIComponent(id), { cache: 'no-store' });
+        const j = await res.json();
+
+        if (!j.success) {
+          // registrar en consola, pero no exponer detalles al usuario
+          console.error('get_linea_detail error response:', j);
+          // fallback: intentar nombre desde list_lineas_enfasis y mostrar datos de ejemplo (sin mensaje técnico)
+          let nombreEncontrado = null;
+          try {
+            const r2 = await fetch('../php/coordinador_actions.php?action=list_lineas_enfasis', { cache: 'no-store' });
+            if (r2.ok) {
+              const list = await r2.json();
+              if (Array.isArray(list)) {
+                const found = list.find(x => Number(x.id) === Number(id));
+                if (found && found.nombre) nombreEncontrado = found.nombre;
+              }
+            }
+          } catch (err2) { /* ignorar */ }
+
+          const demoNombre = nombreEncontrado || ('Línea de Énfasis #' + id);
+          const demo = {
+            id: id,
+            nombre: demoNombre,
+            duracion: '4 semestres',
+            creditos: 16,
+            cupos: 30,
+            descripcion: 'Descripción ejemplo: contiene contenidos teóricos y prácticos, proyectos y ejercicios.'
+          };
+          titleEl.textContent = demo.nombre;
+          durEl.textContent = demo.duracion;
+          credEl.textContent = demo.creditos;
+          cupEl.textContent = demo.cupos;
+          descEl.textContent = demo.descripcion;
+          resumenConfirm.innerHTML = `
+            <p><b>${escapeHtml(demo.nombre)}</b></p>
+            <p>Duración: ${escapeHtml(demo.duracion)}</p>
+            <p>Créditos: ${demo.creditos}</p>
+            <p>Cupos disponibles: ${demo.cupos}</p>
+            <hr><p style="color:#666">Se muestran datos de ejemplo.</p>
+          `;
+          btnIns.disabled = false;
+          return;
+        }
+
+        const d = j.data || {};
+        titleEl.textContent = d.nombre || ('Línea #' + id);
+        durEl.textContent = d.duracion || '-';
+        credEl.textContent = (d.creditos !== undefined ? d.creditos : '-');
+        cupEl.textContent = (d.cupos !== undefined ? d.cupos : '-');
+
+        // Si la descripción viene vacía, intentar endpoint ligero que devuelve solo la descripción
+        let descripcionReal = (d.descripcion || '').trim();
+        if (!descripcionReal) {
+          try {
+            const rdesc = await fetch('../php/coordinador_actions.php?action=get_linea_description&id=' + encodeURIComponent(id), { cache: 'no-store' });
+            if (rdesc.ok) {
+              const jd = await rdesc.json();
+              if (jd && jd.success && jd.descripcion) {
+                descripcionReal = jd.descripcion;
+              }
+            } else {
+              console.warn('get_linea_description HTTP', rdesc.status);
+            }
+          } catch (errDesc) {
+            console.warn('Error get_linea_description', errDesc);
+          }
+        }
+
+        // Si sigue vacío, usar texto por defecto amable
+        if (!descripcionReal) descripcionReal = '(Descripción no disponible; consulte al coordinador).';
+
+        descEl.textContent = descripcionReal;
+
+        // preparar resumen
+        resumenConfirm.innerHTML = `
+          <p><b>${escapeHtml(d.nombre || '-')}</b></p>
+          <p>Duración: ${escapeHtml(d.duracion || '-')}</p>
+          <p>Créditos: ${d.creditos !== undefined ? d.creditos : '-'}</p>
+          <p>Cupos disponibles: ${d.cupos !== undefined ? d.cupos : '-'}</p>
+          <hr><p style="color:#666">Si confirma, se enviará la solicitud de inscripción.</p>
+        `;
+        btnIns.disabled = false;
+      } catch (err) {
+        console.error('cargarDetalle error', err);
+        // fallback genérico sin exponer error al usuario
+        const demoNombre = 'Línea de Énfasis #' + id;
+        const demo = {
+          id: id,
+          nombre: demoNombre,
+          duracion: '4 semestres',
+          creditos: 16,
+          cupos: 30,
+          descripcion: 'Descripción de ejemplo por error de conexión. Revisa la consola para más detalles.'
+        };
+        titleEl.textContent = demo.nombre;
+        durEl.textContent = demo.duracion;
+        credEl.textContent = demo.creditos;
+        cupEl.textContent = demo.cupos;
+        descEl.textContent = demo.descripcion;
+        resumenConfirm.innerHTML = `
+          <p><b>${escapeHtml(demo.nombre)}</b></p>
+          <p>Duración: ${escapeHtml(demo.duracion)}</p>
+          <p>Créditos: ${demo.creditos}</p>
+          <p>Cupos disponibles: ${demo.cupos}</p>
+          <hr><p style="color:#666">Se muestran datos de ejemplo por error de conexión.</p>
+        `;
+        btnIns.disabled = false;
+      }
+    }
+
+    btnIns.addEventListener('click', () => {
+      // mostrar modal resumen centrado (usar flex en el contenedor)
+      confirmModal.style.display = 'flex';
+    });
+    cancelConfirm.addEventListener('click', () => { confirmModal.style.display = 'none'; });
+
+    confirmEnroll.addEventListener('click', async () => {
+      const usuarioId = parseInt(localStorage.getItem('currentUserId') || 0, 10);
+      if (!usuarioId) {
+        alert('Debe iniciar sesión como estudiante para inscribirse.');
+        confirmModal.style.display = 'none';
+        return;
+      }
+      try {
+        const fd = new FormData();
+        fd.append('action', 'solicitar_inscripcion_linea');
+        fd.append('usuario_id', usuarioId);
+        fd.append('linea_id', lineaId);
+        const res = await fetch('../php/coordinador_actions.php', { method: 'POST', body: fd });
+        const j = await res.json();
+        if (j.success) {
+          alert(j.message || 'Solicitud enviada al coordinador.');
+          confirmModal.style.display = 'none';
+        } else {
+          alert('No se pudo enviar la solicitud: ' + (j.message || 'error'));
+        }
+      } catch (err) {
+        console.error('inscribir error', err);
+        alert('Error al procesar la solicitud. Revise la consola.');
+      }
+    });
+
+    function escapeHtml(s) {
+      if (s === null || s === undefined) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    function cerrarSesion() {
+      try { localStorage.removeItem('currentUserId'); localStorage.removeItem('currentUserName'); } catch(e){}
+      window.location.href = '../index.html';
+    }
+  </script>
+</body>
+</html>

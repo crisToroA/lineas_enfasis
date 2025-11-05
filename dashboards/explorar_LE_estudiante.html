@@ -28,14 +28,14 @@
                             <span class="nav-text">Explorar Líneas de Énfasis</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="#" class="nav-link">
+                    <li class="nav-item" id="navMiLinea" style="display:none;">
+                        <a href="mi_linea.html" class="nav-link">
                             <span class="nav-icon">📚</span>
                             <span class="nav-text">Mi Línea de Énfasis</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="#" class="nav-link">
+                    <li class="nav-item" id="navCalificaciones" style="display:none;">
+                        <a href="calificaciones.html" class="nav-link">
                             <span class="nav-icon">🎓</span>
                             <span class="nav-text">Calificaciones</span>
                         </a>
@@ -55,6 +55,9 @@
                         <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=400" alt="Estudiantes">
                     </div>
                 </section>
+
+                <!-- añadir un área de debug visible debajo del hero para ver la respuesta del servidor -->
+                <div id="linesDebug" style="max-width:1100px;margin:18px auto 0;color:#c00;font-size:13px;display:none;"></div>
 
                 <!-- Cards Grid (reemplazado por generación dinámica) -->
                 <div id="cardsGrid" class="cards-grid" aria-live="polite">
@@ -78,6 +81,17 @@
     </div>
 
     <script>
+    // Añadido: función segura para escapar HTML usada por renderLines y otros
+    function escapeHtml(text) {
+        if (text === null || text === undefined) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     (function(){
         const openBtn = document.getElementById('openChat');
         const modal = document.getElementById('chatModal');
@@ -152,62 +166,379 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
  
     <script>
+    // Reemplazo de cargarLineasEstudiante con diagnóstico y fallback
+async function cargarLineasEstudiante() {
+    const cont = document.getElementById('cardsGrid');
+    const dbg = document.getElementById('linesDebug');
+    cont.innerHTML = '<p style="color:#666;">Cargando líneas de énfasis...</p>';
+    dbg.style.display = 'none';
+    dbg.textContent = '';
+
+    // Datos de fallback para mostrar si el backend falla
+    const fallback = [
+        { id: 1, nombre: 'Ingeniería de Software', duracion:'4 semestres', creditos: 20, cupos: 40, descripcion: 'Enfoque en análisis, diseño, pruebas y despliegue de software.' },
+        { id: 2, nombre: 'Inteligencia Artificial', duracion:'4 semestres', creditos: 18, cupos: 30, descripcion: 'Aprendizaje automático, visión por computador y PLN.' },
+        { id: 3, nombre: 'Robótica', duracion:'4 semestres', creditos: 18, cupos: 25, descripcion: 'Integración de mecánica, electrónica y control para robots.' },
+        { id: 4, nombre: 'Big Data', duracion:'4 semestres', creditos: 20, cupos: 30, descripcion: 'Procesamiento, almacenamiento y visualización de grandes volúmenes de datos.' },
+        { id: 5, nombre: 'Gestión de la Información y el Conocimiento', duracion:'4 semestres', creditos: 16, cupos: 40, descripcion: 'Sistemas de información, BI y gestión documental.' }
+    ];
+
+    try {
+        const res = await fetch('../php/coordinador_actions.php?action=list_lineas_enfasis', { cache: 'no-store' });
+        const text = await res.text();
+
+        // mostrar respuesta cruda en debug si no OK
+        if (!res.ok) {
+            dbg.style.display = 'block';
+            dbg.textContent = `Error HTTP ${res.status} al pedir list_lineas_enfasis. Respuesta: ${text}`;
+            renderLines(fallback);
+            return;
+        }
+
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            // texto no JSON
+            dbg.style.display = 'block';
+            dbg.textContent = 'Respuesta inválida (no JSON) del servidor: ' + text;
+            renderLines(fallback);
+            return;
+        }
+
+        // Si la API devolvió un objeto con success:false, mostrar detalle y usar fallback
+        if (Array.isArray(data) === false) {
+            // puede ser { success:false, message:'...' } o { success:true, data: [...] }
+            if (data && data.success === true && Array.isArray(data.data)) {
+                renderLines(data.data);
+                return;
+            }
+            dbg.style.display = 'block';
+            dbg.textContent = 'Respuesta inesperada del servidor: ' + JSON.stringify(data);
+            renderLines(fallback);
+            return;
+        }
+
+        // OK: data es arreglo
+        if (data.length === 0) {
+            dbg.style.display = 'block';
+            dbg.textContent = 'La lista viene vacía desde el servidor. Mostrando ejemplos locales.';
+            renderLines(fallback);
+            return;
+        }
+
+        // Renderizar los datos reales
+        renderLines(data);
+    } catch (err) {
+        console.error('Error cargar líneas de énfasis', err);
+        const dbg = document.getElementById('linesDebug');
+        dbg.style.display = 'block';
+        dbg.textContent = 'Error de conexión al servidor: ' + (err.message || err);
+        renderLines(fallback);
+    }
+}
+
+// helper para renderizar listas (espera array de objetos con al menos id y nombre)
+function renderLines(list) {
+    const cont = document.getElementById('cardsGrid');
+    cont.innerHTML = '';
+    const icons = {
+        'Ingeniería de Software': '🛠️',
+        'Inteligencia Artificial': '🤖',
+        'Robótica': '🤖',
+        'Big Data': '📊',
+        'Gestión de la Información y el Conocimiento': '📚',
+        'Sistemas Embebidos': '🔌',
+        'Arduino y Robótica Educativa': '🔩'
+    };
+
+    list.forEach(le => {
+        const name = le.nombre || le.name || ('Línea #' + (le.id || ''));
+        const desc = (le.descripcion || '').trim();
+        const dur = le.duracion || '';
+        const credits = (le.creditos !== undefined ? le.creditos : '');
+        const cupos = (le.cupos !== undefined ? le.cupos : '');
+        const emoji = icons[name] || '📘';
+
+        const card = document.createElement('div');
+        card.className = 'emphasis-card';
+        card.innerHTML = `
+            <div class="card-image" style="display:flex;align-items:center;justify-content:center;background:#fff;height:140px;font-size:64px;">
+                <div aria-hidden="true">${escapeHtml(emoji)}</div>
+            </div>
+            <div class="card-body">
+                <h3 class="card-title">${escapeHtml(name)}</h3>
+                <p style="color:#666;font-size:14px;margin-bottom:10px;">${escapeHtml(desc || 'Información introductoria disponible en la página de detalle.')}</p>
+                <div style="font-size:13px;color:#444;margin-bottom:10px;">
+                    <span style="margin-right:12px;"><b>Duración:</b> ${escapeHtml(dur)}</span>
+                    <span style="margin-right:12px;"><b>Créditos:</b> ${escapeHtml(credits)}</span>
+                    <span><b>Cupos:</b> ${escapeHtml(cupos)}</span>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-select" onclick="window.location.href='linea_detail.html?id=${encodeURIComponent(le.id)}'">Ver</button>
+                    <button class="btn-select" onclick="abrirSimulador(${encodeURIComponent(le.id)}, '${escapeHtml(name)}')" style="background:#fff;color:#c8102e;border:1px solid #e6e6e6;">Simular</button>
+                </div>
+            </div>
+        `;
+        cont.appendChild(card);
+    });
+}
+
     // Cargar líneas de énfasis desde el backend y renderizar tarjetas
     async function cargarLineasEstudiante() {
         const cont = document.getElementById('cardsGrid');
+        const dbg = document.getElementById('linesDebug');
         cont.innerHTML = '<p style="color:#666;">Cargando líneas de énfasis...</p>';
+        dbg.style.display = 'none';
+        dbg.textContent = '';
+
+        // Datos de fallback para mostrar si el backend falla
+        const fallback = [
+            { id: 1, nombre: 'Ingeniería de Software', duracion:'4 semestres', creditos: 20, cupos: 40, descripcion: 'Enfoque en análisis, diseño, pruebas y despliegue de software.' },
+            { id: 2, nombre: 'Inteligencia Artificial', duracion:'4 semestres', creditos: 18, cupos: 30, descripcion: 'Aprendizaje automático, visión por computador y PLN.' },
+            { id: 3, nombre: 'Robótica', duracion:'4 semestres', creditos: 18, cupos: 25, descripcion: 'Integración de mecánica, electrónica y control para robots.' },
+            { id: 4, nombre: 'Big Data', duracion:'4 semestres', creditos: 20, cupos: 30, descripcion: 'Procesamiento, almacenamiento y visualización de grandes volúmenes de datos.' },
+            { id: 5, nombre: 'Gestión de la Información y el Conocimiento', duracion:'4 semestres', creditos: 16, cupos: 40, descripcion: 'Sistemas de información, BI y gestión documental.' }
+        ];
+
         try {
             const res = await fetch('../php/coordinador_actions.php?action=list_lineas_enfasis', { cache: 'no-store' });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
-            cont.innerHTML = '';
-            if (!Array.isArray(data) || data.length === 0) {
-                cont.innerHTML = '<p style="color:#666;">No se encontraron líneas de énfasis.</p>';
+            const text = await res.text();
+
+            // mostrar respuesta cruda en debug si no OK
+            if (!res.ok) {
+                dbg.style.display = 'block';
+                dbg.textContent = `Error HTTP ${res.status} al pedir list_lineas_enfasis. Respuesta: ${text}`;
+                renderLines(fallback);
                 return;
             }
 
-            const images = {
-                'Ingeniería de Software': 'https://images.unsplash.com/photo-1587620962725-abab7fe55159?w=800',
-                'Inteligencia Artificial': 'https://images.unsplash.com/photo-1508385082359-f9d8f6f20f6e?w=800',
-                'Robótica': 'https://images.unsplash.com/photo-1549921296-3b2d1e0a3f0b?w=800',
-                'Big Data': 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800',
-                'Gestión de la Información y el Conocimiento': 'https://images.unsplash.com/photo-1526378728272-1b2f1b6f3b7b?w=800'
-            };
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                // texto no JSON
+                dbg.style.display = 'block';
+                dbg.textContent = 'Respuesta inválida (no JSON) del servidor: ' + text;
+                renderLines(fallback);
+                return;
+            }
 
-            data.forEach(le => {
-                const img = images[le.nombre] || 'https://images.unsplash.com/photo-1501877008226-4fca48a11b9d?w=800';
-                const card = document.createElement('div');
-                card.className = 'emphasis-card';
-                card.innerHTML = `
-                    <div class="card-image"><img src="${img}" alt="${escapeHtml(le.nombre)}"></div>
-                    <div class="card-body">
-                        <h3 class="card-title">${escapeHtml(le.nombre)}</h3>
-                        <p style="color:#666;font-size:14px;margin-bottom:10px;">Recursos, proyectos y guías introductorias sobre ${escapeHtml(le.nombre)}.</p>
-                        <div style="display:flex;gap:8px;">
-                            <a class="btn-select" href="../projects/linea.php?id=${encodeURIComponent(le.id)}">Ver</a>
-                            <button class="btn-select" onclick="abrirSimulador(${le.id}, '${escapeHtml(le.nombre)}')" style="background:#fff;color:#c8102e;border:1px solid #e6e6e6;">Simular</button>
-                        </div>
-                    </div>
-                `;
-                cont.appendChild(card);
-            });
+            // Si la API devolvió un objeto con success:false, mostrar detalle y usar fallback
+            if (Array.isArray(data) === false) {
+                // puede ser { success:false, message:'...' } o { success:true, data: [...] }
+                if (data && data.success === true && Array.isArray(data.data)) {
+                    renderLines(data.data);
+                    return;
+                }
+                dbg.style.display = 'block';
+                dbg.textContent = 'Respuesta inesperada del servidor: ' + JSON.stringify(data);
+                renderLines(fallback);
+                return;
+            }
+
+            // OK: data es arreglo
+            if (data.length === 0) {
+                dbg.style.display = 'block';
+                dbg.textContent = 'La lista viene vacía desde el servidor. Mostrando ejemplos locales.';
+                renderLines(fallback);
+                return;
+            }
+
+            // Renderizar los datos reales
+            renderLines(data);
         } catch (err) {
             console.error('Error cargar líneas de énfasis', err);
-            cont.innerHTML = '<p style="color:#c00;">Error al cargar las líneas.</p>';
+            const dbg = document.getElementById('linesDebug');
+            dbg.style.display = 'block';
+            dbg.textContent = 'Error de conexión al servidor: ' + (err.message || err);
+            renderLines(fallback);
         }
     }
 
-    function escapeHtml(text) {
-        if (!text && text !== 0) return '';
-        return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-    }
+    // helper para renderizar listas (espera array de objetos con al menos id y nombre)
+    function renderLines(list) {
+        const cont = document.getElementById('cardsGrid');
+        cont.innerHTML = '';
+        const icons = {
+            'Ingeniería de Software': '🛠️',
+            'Inteligencia Artificial': '🤖',
+            'Robótica': '🤖',
+            'Big Data': '📊',
+            'Gestión de la Información y el Conocimiento': '📚',
+            'Sistemas Embebidos': '🔌',
+            'Arduino y Robótica Educativa': '🔩'
+        };
 
-    function abrirSimulador(id, nombre) {
-        alert('Abrir simulador para: ' + nombre + ' (id=' + id + '). Implementa la vista del simulador según el proyecto.');
+        list.forEach(le => {
+            const name = le.nombre || le.name || ('Línea #' + (le.id || ''));
+            const desc = (le.descripcion || '').trim();
+            const dur = le.duracion || '';
+            const credits = (le.creditos !== undefined ? le.creditos : '');
+            const cupos = (le.cupos !== undefined ? le.cupos : '');
+            const emoji = icons[name] || '📘';
+
+            const card = document.createElement('div');
+            card.className = 'emphasis-card';
+            card.innerHTML = `
+                <div class="card-image" style="display:flex;align-items:center;justify-content:center;background:#fff;height:140px;font-size:64px;">
+                    <div aria-hidden="true">${escapeHtml(emoji)}</div>
+                </div>
+                <div class="card-body">
+                    <h3 class="card-title">${escapeHtml(name)}</h3>
+                    <p style="color:#666;font-size:14px;margin-bottom:10px;">${escapeHtml(desc || 'Información introductoria disponible en la página de detalle.')}</p>
+                    <div style="font-size:13px;color:#444;margin-bottom:10px;">
+                        <span style="margin-right:12px;"><b>Duración:</b> ${escapeHtml(dur)}</span>
+                        <span style="margin-right:12px;"><b>Créditos:</b> ${escapeHtml(credits)}</span>
+                        <span><b>Cupos:</b> ${escapeHtml(cupos)}</span>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn-select" onclick="window.location.href='linea_detail.html?id=${encodeURIComponent(le.id)}'">Ver</button>
+                        <button class="btn-select" onclick="abrirSimulador(${encodeURIComponent(le.id)}, '${escapeHtml(name)}')" style="background:#fff;color:#c8102e;border:1px solid #e6e6e6;">Simular</button>
+                    </div>
+                </div>
+            `;
+            cont.appendChild(card);
+        });
     }
 
     document.addEventListener('DOMContentLoaded', cargarLineasEstudiante);
     </script>
+ 
+    <!-- Añadir modales al final del body (detalle + confirmación) -->
+<div id="modalLineaDetalle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:9999;">
+  <div style="background:white;padding:20px;border-radius:8px;max-width:720px;width:95%;max-height:90vh;overflow:auto;">
+    <h3 id="mdTitulo">Línea</h3>
+    <p><b>Duración:</b> <span id="mdDuracion">-</span> &nbsp; <b>Créditos:</b> <span id="mdCreditos">-</span> &nbsp; <b>Cupos:</b> <span id="mdCupos">-</span></p>
+    <hr>
+    <div id="mdDescripcion" style="color:#444;line-height:1.5;">-</div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+      <button onclick="cerrarModalDetalle()" style="padding:8px 12px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer;">Cerrar</button>
+      <button id="mdInscribirseBtn" style="padding:8px 12px;border-radius:6px;background:#c8102e;color:#fff;border:none;cursor:pointer;">Inscribirme</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalConfirmInscripcion" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:9999;">
+  <div style="background:white;padding:20px;border-radius:8px;max-width:520px;width:95%;">
+    <h4>Confirmar inscripción</h4>
+    <div id="confirmResumen" style="margin-top:8px;color:#333;"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+      <button onclick="cerrarConfirm()" style="padding:8px 12px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer;">Cerrar</button>
+      <button id="confirmInscribirBtn" style="padding:8px 12px;border-radius:6px;background:#28a745;color:#fff;border:none;cursor:pointer;">Inscribirme ahora</button>
+    </div>
+  </div>
+</div>
+
+<!-- Añadir funciones JS para detalle/confirmación/inscripción -->
+<script>
+async function abrirDetalleLinea(id) {
+    try {
+        const res = await fetch('../php/coordinador_actions.php?action=get_linea_detail&id=' + encodeURIComponent(id), { cache: 'no-store' });
+        const j = await res.json();
+        if (!j.success) {
+            alert('No se pudo cargar la información: ' + (j.message || 'error'));
+            return;
+        }
+        const d = j.data || {};
+        document.getElementById('mdTitulo').textContent = d.nombre || '-';
+        document.getElementById('mdDuracion').textContent = d.duracion || '-';
+        document.getElementById('mdCreditos').textContent = (d.creditos !== null ? d.creditos : '-');
+        document.getElementById('mdCupos').textContent = (d.cupos !== null ? d.cupos : '-');
+        document.getElementById('mdDescripcion').textContent = d.descripcion || '(Sin descripción)';
+        // guardar id en botón para usar luego
+        const btn = document.getElementById('mdInscribirseBtn');
+        btn.dataset.lineaId = id;
+        // mostrar modal
+        document.getElementById('modalLineaDetalle').style.display = 'flex';
+
+        btn.onclick = function() {
+            mostrarConfirmacionInscripcion(d);
+        };
+    } catch (err) {
+        console.error('abrirDetalleLinea error', err);
+        alert('Error al cargar detalle.');
+    }
+}
+
+function cerrarModalDetalle() {
+    document.getElementById('modalLineaDetalle').style.display = 'none';
+}
+
+function mostrarConfirmacionInscripcion(detalle) {
+    const resumen = document.getElementById('confirmResumen');
+    resumen.innerHTML = `
+        <p><b>${escapeHtml(detalle.nombre || '-')}</b></p>
+        <p>Duración: ${escapeHtml(detalle.duracion || '-')}</p>
+        <p>Créditos: ${detalle.creditos !== null ? detalle.creditos : '-'}</p>
+        <p>Cupos disponibles: ${detalle.cupos !== null ? detalle.cupos : '-'}</p>
+        <hr>
+        <p style="color:#666">Revisa la información antes de confirmar la inscripción.</p>
+    `;
+    // guardar linea id en botón confirm
+    document.getElementById('confirmInscribirBtn').dataset.lineaId = detalle.id;
+    // mostrar confirm modal
+    document.getElementById('modalConfirmInscripcion').style.display = 'flex';
+}
+
+function cerrarConfirm() {
+    document.getElementById('modalConfirmInscripcion').style.display = 'none';
+}
+
+// realizar inscripción (llama al backend)
+document.getElementById('confirmInscribirBtn').addEventListener('click', async function() {
+    const lineaId = parseInt(this.dataset.lineaId || 0, 10);
+    const usuarioId = parseInt(localStorage.getItem('currentUserId') || 0, 10);
+    if (!usuarioId) { alert('Debe iniciar sesión como estudiante para solicitar inscripción.'); return; }
+    if (!lineaId) { alert('Línea inválida.'); return; }
+
+    try {
+        const fd = new FormData();
+        fd.append('action', 'solicitar_inscripcion_linea');
+        fd.append('usuario_id', usuarioId);
+        fd.append('linea_id', lineaId);
+
+        const res = await fetch('../php/coordinador_actions.php', { method: 'POST', body: fd });
+        const j = await res.json();
+        if (j.success) {
+            alert(j.message || 'Solicitud enviada al coordinador.');
+            cerrarConfirm();
+            cerrarModalDetalle();
+        } else {
+            alert('No se pudo enviar la solicitud: ' + (j.message || 'error'));
+        }
+    } catch (err) {
+        console.error('solicitar error', err);
+        alert('Error al enviar la solicitud. Revise la consola.');
+    }
+});
+
+// Después de cargar lineas, comprobar si el usuario ya está inscrito y mostrar opciones
+async function checkInscripcionUsuario() {
+    const usuarioId = parseInt(localStorage.getItem('currentUserId') || 0, 10);
+    if (!usuarioId) return;
+    try {
+        const res = await fetch(`../php/coordinador_actions.php?action=get_mi_linea&usuario_id=${usuarioId}`, { cache: 'no-store' });
+        const j = await res.json();
+        if (j && j.success && Array.isArray(j.data) && j.data.length > 0) {
+            // mostrar links
+            document.getElementById('navMiLinea').style.display = 'block';
+            document.getElementById('navCalificaciones').style.display = 'block';
+        } else {
+            document.getElementById('navMiLinea').style.display = 'none';
+            document.getElementById('navCalificaciones').style.display = 'none';
+        }
+    } catch (e) {
+        console.warn('No fue posible comprobar inscripción', e);
+    }
+}
+
+// llamar a checkInscripcionUsuario tras cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    cargarLineasEstudiante();
+    checkInscripcionUsuario();
+});
+</script>
  
  </body>
  </html>

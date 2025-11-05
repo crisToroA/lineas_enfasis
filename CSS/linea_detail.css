@@ -1,0 +1,63 @@
+/* Header similar a otras páginas */
+.header {
+    background-color: #c8102e;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+}
+.header img { height: 40px; }
+.header .button button {
+    background: white;
+    color: #000;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+/* Page layout */
+.page-wrap {
+    max-width: 1000px;
+    margin: 24px auto;
+    padding: 18px;
+}
+.page-card {
+    padding: 20px 22px;
+    border-radius: 10px;
+    background: #fff;
+}
+
+/* Meta area */
+.meta { display:flex; gap:18px; flex-wrap:wrap; margin-top:8px; color:#333; }
+.meta b { color:#c8102e; }
+
+/* Actions */
+.actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+
+/* Modal backdrop and card */
+.modal-backdrop-custom {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    display: flex;
+}
+.modal-card {
+    background: #fff;
+    padding: 18px;
+    border-radius: 8px;
+    max-width: 520px;
+    width: 95%;
+}
+
+/* Responsive */
+@media (max-width: 800px) {
+    .page-wrap { padding: 12px; margin: 12px; }
+    .meta { flex-direction: column; gap:6px; }
+    .actions { justify-content: center; }
+}
