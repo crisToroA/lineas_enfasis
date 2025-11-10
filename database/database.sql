@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS reportes_coordinador (
     FOREIGN KEY (enviado_por) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
--- Añadir curso Cálculo Diferencial (CLD002) asignado al profesor con documento '3001' y a la línea Ingeniería de Software
+-- Añadir curso Cálculo Diferencial (CLD002) asignado al profesor with documento '3001' y a la línea Ingeniería de Software
 INSERT IGNORE INTO cursos (nombre, codigo, semestre, profesor_id, linea_enfasis_id, dia, hora_inicio, hora_fin)
 SELECT 'Cálculo Diferencial', 'CLD002', '2024-1', u.id, le.id, 'Lunes', '10:00:00', '12:00:00'
 FROM usuarios u
@@ -257,3 +257,25 @@ FROM cursos c
 JOIN usuarios u ON u.documento = '2001'
 WHERE c.codigo = 'CLD002'
 LIMIT 1;
+
+-- Nueva tabla para actividades/tareas vinculadas a líneas o cursos
+CREATE TABLE IF NOT EXISTS actividades (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    titulo VARCHAR(200) NOT NULL,
+    descripcion TEXT NULL,
+    fecha_entrega DATE NOT NULL,
+    linea_enfasis_id INT NULL,
+    curso_id INT NULL,
+    prioridad ENUM('baja','media','alta') DEFAULT 'media',
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (linea_enfasis_id) REFERENCES lineas_enfasis(id) ON DELETE SET NULL,
+    FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE SET NULL
+);
+
+-- Ejemplos: actividades para CLD002 (Cálculo Diferencial) si existe
+INSERT IGNORE INTO actividades (titulo, descripcion, fecha_entrega, curso_id, prioridad)
+SELECT 'Entrega taller 1: Límites', 'Resolver ejercicios 1-10 del taller y subir PDF.', DATE_ADD(CURDATE(), INTERVAL 7 DAY), c.id, 'alta'
+FROM cursos c WHERE c.codigo = 'CLD002' LIMIT 1
+UNION ALL
+SELECT 'Quiz 1: Derivadas', 'Pequeña evaluación online sobre derivadas.', DATE_ADD(CURDATE(), INTERVAL 12 DAY), c.id, 'media'
+FROM cursos c WHERE c.codigo = 'CLD002' LIMIT 1;

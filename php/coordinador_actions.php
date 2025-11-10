@@ -703,225 +703,76 @@ try {
 	    }
 	}
 
-	// Nueva acción: obtener mis notas (estudiante)
-	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'mis_notas' && isset($_GET['usuario_id'])) {
+	// Nueva acción: obtener actividades pendientes del estudiante (por línea o curso)
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'mis_actividades' && isset($_GET['usuario_id'])) {
 	    $uid = intval($_GET['usuario_id']);
-	    if ($uid <= 0) { echo json_encode(['success' => false, 'message' => 'ID de usuario inválido']); exit; }
-	    $sql = "SELECT cal.id AS calificacion_id, cal.nota,
-	                   c.id AS curso_id, c.nombre AS curso_nombre, c.codigo AS curso_codigo, c.semestre
-	            FROM calificaciones cal
-	            JOIN cursos c ON cal.curso_id = c.id
-	            WHERE cal.estudiante_id = ?
-	            ORDER BY c.semestre DESC, c.nombre ASC";
-	    $stmt = $conn->prepare($sql);
-	    if (!$stmt) { echo json_encode(['success'=>false,'message'=>'Error interno al preparar consulta','detail'=>$conn->error]); exit; }
-	    $stmt->bind_param('i', $uid);
-	    $stmt->execute();
-	    $res = $stmt->get_result();
-	    $out = [];
-	    while ($r = $res->fetch_assoc()) $out[] = $r;
-	    echo json_encode(['success'=>true,'data'=>$out]);
-	    exit;
-	}
+	    if ($uid <= 0) { echo json_encode(['success'=>false,'message'=>'ID inválido']); exit; }
 
-	// Nueva acción: listar solicitudes de un remitente (útil para verificar desde UI estudiante)
-	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'mis_solicitudes' && isset($_GET['usuario_id'])) {
-	    $uid = intval($_GET['usuario_id']);
-	    if ($uid <= 0) { echo json_encode(['success' => false, 'message' => 'ID inválido']); exit; }
-	    $sql = "SELECT id, tipo, descripcion, estado, fecha, linea_enfasis_id FROM solicitudes WHERE remitente_id = ? ORDER BY fecha DESC LIMIT 50";
-	    $stmt = $conn->prepare($sql);
-	    if (!$stmt) {
-	        echo json_encode(['success' => false, 'message' => 'Error interno al preparar consulta.']);
-	        exit;
-	    }
-	    $stmt->bind_param('i', $uid);
-	    $stmt->execute();
-	    $res = $stmt->get_result();
-	    $list = [];
-	    while ($r = $res->fetch_assoc()) $list[] = $r;
-	    echo json_encode(['success' => true, 'data' => $list]);
-	    exit;
-	}
-
-	// Acción: obtener la(s) línea(s) confirmadas de un usuario
-	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_mi_linea' && isset($_GET['usuario_id'])) {
-	    $uid = intval($_GET['usuario_id']);
-	    if ($uid <= 0) { echo json_encode(['success' => false]); exit; }
-	    $sql = "SELECT i.id AS inscripcion_id, le.id AS linea_id, le.nombre, le.duracion, le.creditos, le.cupos, le.descripcion
-	            FROM inscripciones i
-	            JOIN lineas_enfasis le ON i.linea_enfasis_id = le.id
-	            WHERE i.usuario_id = ? AND i.estado = 'confirmada'
-	            ORDER BY i.fecha DESC";
-	    $stmt = $conn->prepare($sql);
-	    $stmt->bind_param('i', $uid);
-	    $stmt->execute();
-	    $res = $stmt->get_result();
-	    $lista = [];
-	    while ($r = $res->fetch_assoc()) $lista[] = $r;
-	    echo json_encode(['success' => true, 'data' => $lista]);
-	    exit;
-	}
-
-	// Acción: listar cursos de la línea del usuario para un semestre dado
-	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list_cursos_mi_linea' && isset($_GET['usuario_id']) && isset($_GET['semestre'])) {
-	    $uid = intval($_GET['usuario_id']);
-	    $sem = trim($_GET['semestre']);
-	    if ($uid <= 0 || $sem === '') { echo json_encode(['success' => false]); exit; }
-	    // obtener la primera línea confirmada del usuario
-	    $q = $conn->prepare("SELECT linea_enfasis_id FROM inscripciones WHERE usuario_id = ? AND estado = 'confirmada' ORDER BY fecha DESC LIMIT 1");
+	    // obtener líneas confirmadas del usuario
+	    $q = $conn->prepare("SELECT linea_enfasis_id FROM inscripciones WHERE usuario_id = ? AND estado = 'confirmada'");
 	    $q->bind_param('i', $uid);
 	    $q->execute();
-	    $row = $q->get_result()->fetch_assoc();
-	    if (!$row) { echo json_encode(['success' => true, 'data' => []]); exit; }
-	    $linea = intval($row['linea_enfasis_id']);
-	    $stmt = $conn->prepare("SELECT c.id, c.nombre, c.codigo, c.semestre, u.nombre AS profesor_nombre FROM cursos c JOIN usuarios u ON c.profesor_id = u.id WHERE c.linea_enfasis_id = ? AND c.semestre = ? ORDER BY c.nombre ASC");
-	    $stmt->bind_param('is', $linea, $sem);
-	    $stmt->execute();
-	    $res = $stmt->get_result();
-	    $cursos = [];
-	    while ($r = $res->fetch_assoc()) $cursos[] = $r;
-	    echo json_encode(['success' => true, 'data' => $cursos]);
-	    exit;
-	}
+	    $res = $q->get_result();
+	    $lineas = [];
+	    while ($r = $res->fetch_assoc()) $lineas[] = intval($r['linea_enfasis_id']);
+	    $q->close();
 
-	// Listar cursos asignados a un profesor (incluye dia y horario)
-	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list_mis_cursos_profesor' && isset($_GET['profesor_id'])) {
-	    $pid = intval($_GET['profesor_id']);
-	    if ($pid <= 0) { echo json_encode(['success' => false, 'message' => 'Profesor inválido']); exit; }
-	    $sql = "SELECT id, nombre, codigo, semestre, linea_enfasis_id, dia, hora_inicio, hora_fin FROM cursos WHERE profesor_id = ? ORDER BY semestre DESC, nombre ASC";
-	    $stmt = $conn->prepare($sql);
-	    if (!$stmt) { echo json_encode(['success'=>false,'message'=>'Error interno','detail'=>$conn->error]); exit; }
-	    $stmt->bind_param('i', $pid);
-	    $stmt->execute();
-	    $res = $stmt->get_result();
-	    $out = [];
-	    while ($r = $res->fetch_assoc()) $out[] = $r;
-	    echo json_encode(['success'=>true,'data'=>$out]);
-	    exit;
-	}
-
-	// Listar estudiantes inscritos en un curso y sus calificaciones (si existen)
-	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list_estudiantes_curso' && isset($_GET['curso_id'])) {
-	    $cid = intval($_GET['curso_id']);
-	    if ($cid <= 0) { echo json_encode(['success'=>false,'message'=>'Curso inválido']); exit; }
-	    $sql = "SELECT u.id AS estudiante_id, u.nombre, u.documento,
-	                   cals.nota
-	            FROM inscripciones ins
-	            JOIN usuarios u ON ins.usuario_id = u.id
-	            LEFT JOIN calificaciones cals ON cals.curso_id = ? AND cals.estudiante_id = u.id
-	            WHERE ins.linea_enfasis_id = (SELECT linea_enfasis_id FROM cursos WHERE id = ?) OR ins.usuario_id IN (
-	                  SELECT usuario_id FROM inscripciones WHERE linea_enfasis_id = (SELECT linea_enfasis_id FROM cursos WHERE id = ?)
-	            )
-	            /* Fallback simple: también listar inscripciones por curso en caso de existir relación explícita */
-	            ";
-	    // Simplificar: obtener estudiantes que estén inscritos en la misma línea o, si existen inscripciones por curso, obtenerlas
-	    // Ejecutar dos consultas: primero por inscripciones directas a inscripciones.linea_enfasis_id, si no hay, intentar otras fuentes.
+	    // obtener cursos relacionados (opcional)
+	    $q2 = $conn->prepare("SELECT c.id FROM cursos c WHERE c.linea_enfasis_id IN (" . (count($lineas)? implode(',', array_map('intval',$lineas)) : "0") . ")");
+	    // si no hay líneas, devolvemos vacío
+	    $activities = [];
 	    try {
-	        // Intento: obtener estudiantes relacionados por línea_enfasis
-	        $q1 = $conn->prepare("SELECT le.id FROM cursos c JOIN lineas_enfasis le ON c.linea_enfasis_id = le.id WHERE c.id = ? LIMIT 1");
-	        $q1->bind_param('i', $cid);
-	        $q1->execute();
-	        $lr = $q1->get_result()->fetch_assoc();
-	        $linea_id = intval($lr['id'] ?? 0);
-	        $students = [];
-	        if ($linea_id > 0) {
-	            $s1 = $conn->prepare("SELECT u.id AS estudiante_id, u.nombre, u.documento, cals.nota
-	                                  FROM inscripciones ins
-	                                  JOIN usuarios u ON ins.usuario_id = u.id
-	                                  LEFT JOIN calificaciones cals ON cals.curso_id = ? AND cals.estudiante_id = u.id
-	                                  WHERE ins.linea_enfasis_id = ?
-	                                  ORDER BY u.nombre ASC");
-	            $s1->bind_param('ii', $cid, $linea_id);
-	            $s1->execute();
-	            $res = $s1->get_result();
-	            while ($r = $res->fetch_assoc()) $students[] = $r;
+	        if (count($lineas) === 0) {
+	            echo json_encode(['success'=>true,'data'=>[]]);
+	            exit;
 	        }
-	        // Si no hay estudiantes por linea, intentar por inscripciones directas relacionadas al curso (si aplica)
-	        if (empty($students)) {
-	            $s2 = $conn->prepare("SELECT u.id AS estudiante_id, u.nombre, u.documento, cals.nota
-	                                  FROM usuarios u
-	                                  LEFT JOIN calificaciones cals ON cals.curso_id = ? AND cals.estudiante_id = u.id
-	                                  WHERE u.rol = 'estudiante'
-	                                  ORDER BY u.nombre ASC
-	                                  LIMIT 200");
-	            $s2->bind_param('i', $cid);
-	            $s2->execute();
-	            $res2 = $s2->get_result();
-	            while ($r = $res2->fetch_assoc()) $students[] = $r;
-	        }
-	        echo json_encode(['success'=>true,'data'=>$students]);
+	        $q2->execute();
+	        $q2->close();
+
+	        // Consultar actividades por línea o por curso
+	        $inLineas = implode(',', array_map('intval',$lineas));
+	        $sql = "SELECT id, titulo, descripcion, fecha_entrega, linea_enfasis_id, curso_id, prioridad FROM actividades
+	                WHERE (linea_enfasis_id IN ($inLineas)) 
+	                   OR (curso_id IN (SELECT id FROM cursos WHERE linea_enfasis_id IN ($inLineas)))
+	                ORDER BY fecha_entrega ASC";
+	        $stmt = $conn->prepare($sql);
+	        $stmt->execute();
+	        $rset = $stmt->get_result();
+	        while ($a = $rset->fetch_assoc()) $activities[] = $a;
+	        echo json_encode(['success'=>true,'data'=>$activities]);
 	    } catch (Exception $e) {
-	        error_log('list_estudiantes_curso exception: ' . $e->getMessage());
+	        error_log('mis_actividades exception: ' . $e->getMessage());
 	        echo json_encode(['success'=>false,'message'=>'Error interno','detail'=>$e->getMessage()]);
 	    }
 	    exit;
 	}
 
-	// Guardar o actualizar una nota para un estudiante en un curso
-	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nota') {
-	    $curso_id = intval($_POST['curso_id'] ?? 0);
-	    $estudiante_id = intval($_POST['estudiante_id'] ?? 0);
-	    $nota = $_POST['nota'] ?? null;
-	    if ($curso_id <= 0 || $estudiante_id <= 0) { echo json_encode(['success'=>false,'message'=>'Datos inválidos']); exit; }
-	    // normalizar nota
-	    $nota_val = is_numeric($nota) ? floatval($nota) : null;
+	// Nueva acción: crear solicitud genérica desde UI estudiante (tipo + descripcion + opcional linea/curso)
+	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'crear_solicitud') {
+	    $remitente = intval($_POST['remitente_id'] ?? 0);
+	    $tipo = trim($_POST['tipo'] ?? '');
+	    $descripcion = trim($_POST['descripcion'] ?? '');
+	    $linea_id = isset($_POST['linea_enfasis_id']) ? intval($_POST['linea_enfasis_id']) : null;
+	    $curso_id = isset($_POST['curso_id']) ? intval($_POST['curso_id']) : null;
+
+	    if ($remitente <= 0 || $tipo === '') {
+	        echo json_encode(['success'=>false,'message'=>'Datos inválidos']);
+	        exit;
+	    }
+
 	    try {
-	        // usar INSERT ... ON DUPLICATE KEY UPDATE (calificaciones tiene unique)
-	        $stmt = $conn->prepare("INSERT INTO calificaciones (curso_id, estudiante_id, nota) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE nota = VALUES(nota), fecha_actualizacion = NOW()");
-	        if (!$stmt) { error_log('guardar_nota prepare: ' . $conn->error); echo json_encode(['success'=>false,'message'=>'Error interno']); exit; }
-	        // permitir NULL para nota: bind_param requiere tipos; usar 'd' para decimal y pasar null como null_value handling
-	        if ($nota_val === null) {
-	            $nullNota = null;
-	            $stmt->bind_param('iid', $curso_id, $estudiante_id, $nota_val);
-	        } else {
-	            $stmt->bind_param('iid', $curso_id, $estudiante_id, $nota_val);
-	        }
+	        $sql = "INSERT INTO solicitudes (remitente_id, curso_id, tipo, descripcion, linea_enfasis_id, estado) VALUES (?, ?, ?, ?, ?, 'pendiente')";
+	        $stmt = $conn->prepare($sql);
+	        if (!$stmt) { error_log('crear_solicitud prepare: '.$conn->error); echo json_encode(['success'=>false,'message'=>'Error interno']); exit; }
+	        // permitir NULLs para curso/linea
+	        $ci = $curso_id > 0 ? $curso_id : null;
+	        $li = $linea_id > 0 ? $linea_id : null;
+	        $stmt->bind_param('iisss', $remitente, $ci, $tipo, $descripcion, $li);
 	        $ok = $stmt->execute();
-	        if ($ok) echo json_encode(['success'=>true]);
+	        if ($ok) echo json_encode(['success'=>true,'solicitud_id'=>$conn->insert_id]);
 	        else echo json_encode(['success'=>false,'message'=>$stmt->error]);
 	    } catch (Exception $e) {
-	        error_log('guardar_nota exception: ' . $e->getMessage());
-	        echo json_encode(['success'=>false,'message'=>'Error interno']);
-	    }
-	    exit;
-	}
-
-	// Registrar inasistencia / reportar falta
-	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'registrar_inasistencia') {
-	    $curso_id = intval($_POST['curso_id'] ?? 0);
-	    $estudiante_id = intval($_POST['estudiante_id'] ?? 0);
-	    $fecha = $_POST['fecha'] ?? null;
-	    $motivo = trim($_POST['motivo'] ?? '');
-	    $reportado_por = intval($_POST['reportado_por'] ?? 0);
-	    if ($curso_id <= 0 || $estudiante_id <= 0 || !$fecha) { echo json_encode(['success'=>false,'message'=>'Datos inválidos']); exit; }
-	    try {
-	        $stmt = $conn->prepare("INSERT INTO asistencias (curso_id, estudiante_id, fecha, falta, motivo, reportado_por) VALUES (?, ?, ?, 1, ?, ?)");
-	        if (!$stmt) { error_log('registrar_inasistencia prepare: ' . $conn->error); echo json_encode(['success'=>false,'message'=>'Error interno']); exit; }
-	        $stmt->bind_param('iissi', $curso_id, $estudiante_id, $fecha, $motivo, $reportado_por);
-	        $ok = $stmt->execute();
-	        echo json_encode(['success'=> (bool)$ok]);
-	    } catch (Exception $e) {
-	        error_log('registrar_inasistencia exception: ' . $e->getMessage());
-	        echo json_encode(['success'=>false,'message'=>'Error interno']);
-	    }
-	    exit;
-	}
-
-	// Enviar reporte formal al coordinador (inasistencias/ notas u otro)
-	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'enviar_reporte_coordinador') {
-	    $curso_id = intval($_POST['curso_id'] ?? 0);
-	    $tipo = $_POST['tipo'] ?? 'otro';
-	    $contenido = trim($_POST['contenido'] ?? '');
-	    $enviado_por = intval($_POST['enviado_por'] ?? 0);
-	    if ($curso_id <= 0 || !$contenido || $enviado_por <= 0) { echo json_encode(['success'=>false,'message'=>'Datos inválidos']); exit; }
-	    try {
-	        $stmt = $conn->prepare("INSERT INTO reportes_coordinador (curso_id, tipo, contenido, enviado_por) VALUES (?, ?, ?, ?)");
-	        if (!$stmt) { error_log('enviar_reporte_coordinador prepare: ' . $conn->error); echo json_encode(['success'=>false,'message'=>'Error interno']); exit; }
-	        $stmt->bind_param('issi', $curso_id, $tipo, $contenido, $enviado_por);
-	        $ok = $stmt->execute();
-	        echo json_encode(['success'=> (bool)$ok]);
-	    } catch (Exception $e) {
-	        error_log('enviar_reporte_coordinador exception: ' . $e->getMessage());
+	        error_log('crear_solicitud exception: ' . $e->getMessage());
 	        echo json_encode(['success'=>false,'message'=>'Error interno']);
 	    }
 	    exit;
