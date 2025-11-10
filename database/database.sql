@@ -120,9 +120,10 @@ INSERT IGNORE INTO usuarios (documento, password, rol, nombre) VALUES
 ('4001', MD5('coord4001'), 'coordinador', 'Laura Fernández');
 
 -- Añadir líneas de énfasis adicionales útiles para la sección de Arduino/Robótica
-INSERT IGNORE INTO lineas_enfasis (nombre) VALUES
-('Sistemas Embebidos'),
-('Arduino y Robótica Educativa');
+-- (eliminadas por solicitud: 'Sistemas Embebidos' y 'Arduino y Robótica Educativa')
+-- INSERT IGNORE INTO lineas_enfasis (nombre) VALUES
+-- ('Sistemas Embebidos'),
+-- ('Arduino y Robótica Educativa');
 
 -- Tabla para guardar historial de preguntas del chatbot
 CREATE TABLE IF NOT EXISTS chat_history (
