@@ -308,6 +308,7 @@ try {
 
 	    try {
 	        if ($aprobador_id > 0) {
+	            // CORRECCIÓN: tipos correctos: estado (s), comentario (s), aprobador_id (i), solicitud_id (i)
 	            $sql = "UPDATE solicitudes SET estado = ?, comentario_coordinador = ?, aprobador_id = ?, fecha_procesamiento = NOW() WHERE id = ?";
 	            $stmt = $conn->prepare($sql);
 	            if ($stmt === false) {
@@ -316,9 +317,9 @@ try {
 	                echo json_encode(['success' => false, 'message' => 'Error interno al preparar consulta.', 'detail' => $conn->error]);
 	                exit;
 	            }
-	            $stmt->bind_param('siii', $estado, $comentario, $aprobador_id, $solicitud_id);
+	            $stmt->bind_param('ssii', $estado, $comentario, $aprobador_id, $solicitud_id);
 	        } else {
-	            // usar NULL explícito para evitar violar FK con 0
+	            // tipos: estado (s), comentario (s), solicitud_id (i)
 	            $sql = "UPDATE solicitudes SET estado = ?, comentario_coordinador = ?, aprobador_id = NULL, fecha_procesamiento = NOW() WHERE id = ?";
 	            $stmt = $conn->prepare($sql);
 	            if ($stmt === false) {
@@ -345,16 +346,28 @@ try {
 	        $affected = $stmt->affected_rows;
 	        $stmt->close();
 
-	        // si se aprobó, crear efectos secundarios (inscripción) - mantener este bloque existente
+	        // si se aprobó, crear efectos secundarios según tipo
+	        $applied = [];
 	        if ($estado === 'aprobada') {
-	            $q2 = $conn->prepare("SELECT remitente_id, tipo, linea_enfasis_id FROM solicitudes WHERE id = ? LIMIT 1");
+	            $q2 = $conn->prepare("SELECT remitente_id, tipo, linea_enfasis_id, curso_id FROM solicitudes WHERE id = ? LIMIT 1");
 	            if ($q2) {
 	                $q2->bind_param('i', $solicitud_id);
 	                $q2->execute();
 	                $row = $q2->get_result()->fetch_assoc();
-	                if ($row && ($row['tipo'] ?? '') === 'Inscripción LE') {
-	                    $usuario = intval($row['remitente_id']);
-	                    $linea = intval($row['linea_enfasis_id'] ?? 0);
+	                $q2->close();
+	            } else {
+	                $row = null;
+	                error_log('validar_solicitud q2 prepare failed: ' . $conn->error);
+	            }
+
+	            if ($row) {
+	                $usuario = intval($row['remitente_id'] ?? 0);
+	                $tipo = strtolower(trim($row['tipo'] ?? ''));
+	                $linea = intval($row['linea_enfasis_id'] ?? 0);
+	                $curso = intval($row['curso_id'] ?? 0);
+
+	                // 1) Inscripción en línea de énfasis
+	                if (strpos($tipo, 'inscrip') !== false || $tipo === 'inscripción le') {
 	                    if ($usuario > 0 && $linea > 0) {
 	                        $check = $conn->prepare("SELECT id FROM inscripciones WHERE usuario_id = ? AND linea_enfasis_id = ? AND estado = 'confirmada' LIMIT 1");
 	                        if ($check) {
@@ -362,23 +375,68 @@ try {
 	                            $check->execute();
 	                            if ($check->get_result()->num_rows === 0) {
 	                                $ins = $conn->prepare("INSERT INTO inscripciones (usuario_id, linea_enfasis_id, estado) VALUES (?, ?, 'confirmada')");
-	                                if ($ins) {
-	                                    $ins->bind_param('ii', $usuario, $linea);
-	                                    $ins->execute();
-	                                    $ins->close();
-	                                }
+	                                if ($ins) { $ins->bind_param('ii', $usuario, $linea); $ins->execute(); $ins->close(); $applied[] = 'inscripcion_confirmada'; }
+	                            } else {
+	                                $applied[] = 'inscripcion_existente';
 	                            }
 	                            $check->close();
 	                        }
 	                    }
 	                }
-	                $q2->close();
-	            } else {
-	                error_log('validar_solicitud q2 prepare failed: ' . $conn->error);
+
+	                // 2) Cambio de línea / carrera: cancelar inscripciones previas y crear nueva confirmada
+	                if (strpos($tipo, 'cambio') !== false && $linea > 0 && $usuario > 0) {
+	                    // cancelar otras inscripciones confirmadas
+	                    $upd = $conn->prepare("UPDATE inscripciones SET estado = 'cancelada' WHERE usuario_id = ? AND estado = 'confirmada'");
+	                    if ($upd) { $upd->bind_param('i', $usuario); $upd->execute(); $upd->close(); }
+	                    // insertar nueva confirmada si no existe
+	                    $chk2 = $conn->prepare("SELECT id FROM inscripciones WHERE usuario_id = ? AND linea_enfasis_id = ? LIMIT 1");
+	                    if ($chk2) {
+	                        $chk2->bind_param('ii', $usuario, $linea);
+	                        $chk2->execute();
+	                        if ($chk2->get_result()->num_rows === 0) {
+	                            $ins2 = $conn->prepare("INSERT INTO inscripciones (usuario_id, linea_enfasis_id, estado) VALUES (?, ?, 'confirmada')");
+	                            if ($ins2) { $ins2->bind_param('ii', $usuario, $linea); $ins2->execute(); $ins2->close(); $applied[] = 'cambio_linea_aplicado'; }
+	                        } else {
+	                            $applied[] = 'cambio_linea_existente';
+	                        }
+	                        $chk2->close();
+	                    }
+	                }
+
+	                // 3) Homologación: si está asociado a un curso, registrar nota máxima (o marca de homologación)
+	                if (strpos($tipo, 'homolog') !== false && $curso > 0 && $usuario > 0) {
+	                    // insertar/actualizar calificación con nota 100 como evidencia de homologación
+	                    $stmtCal = $conn->prepare("INSERT INTO calificaciones (curso_id, estudiante_id, nota) VALUES (?, ?, 100) ON DUPLICATE KEY UPDATE nota = VALUES(nota), fecha_actualizacion = NOW()");
+	                    if ($stmtCal) {
+	                        $stmtCal->bind_param('ii', $curso, $usuario);
+	                        $stmtCal->execute();
+	                        $stmtCal->close();
+	                        $applied[] = 'homologacion_registrada';
+	                    }
+	                }
+
+	                // 4) Aplazamiento: si existe curso asociado, registrar un reporte y una entrada en asistencias (motivo: aplazamiento aprobado)
+	                if (strpos($tipo, 'aplaz') !== false && $curso > 0 && $usuario > 0) {
+	                    // crear reporte para coordinación (registro histórico)
+	                    $content = "Aplazamiento aprobado para usuario_id={$usuario} en curso_id={$curso}. Comentario: {$comentario}";
+	                    $rstmt = $conn->prepare("INSERT INTO reportes_coordinador (curso_id, tipo, contenido, enviado_por) VALUES (?, 'otro', ?, ?)");
+	                    if ($rstmt) { $rstmt->bind_param('isi', $curso, $content, $aprobador_id); $rstmt->execute(); $rstmt->close(); $applied[] = 'aplazamiento_reportado'; }
+	                    // opcional: registrar entrada en asistencias con falta=0 y motivo
+	                    $ast = $conn->prepare("INSERT INTO asistencias (curso_id, estudiante_id, fecha, falta, motivo, reportado_por) VALUES (?, ?, CURDATE(), 0, ?, ?)");
+	                    if ($ast) { $mot = "Aplazamiento aprobado"; $ast->bind_param('iisi', $curso, $usuario, $mot, $aprobador_id); $ast->execute(); $ast->close(); $applied[] = 'aplazamiento_registrado'; }
+	                }
+
+	                // 5) Suplemento de créditos: registrar reporte para seguimiento por coordinación
+	                if ((strpos($tipo, 'suplemento') !== false || strpos($tipo, 'suplemento de credit') !== false) && $usuario > 0) {
+	                    $content = "Suplemento de créditos aprobado para usuario_id={$usuario}. Comentario: {$comentario}";
+	                    $rs = $conn->prepare("INSERT INTO reportes_coordinador (curso_id, tipo, contenido, enviado_por) VALUES (NULL, 'otro', ?, ?)");
+	                    if ($rs) { $rs->bind_param('si', $content, $aprobador_id); $rs->execute(); $rs->close(); $applied[] = 'suplemento_reportado'; }
+	                }
 	            }
 	        }
 
-	        echo json_encode(['success' => true, 'affected_rows' => $affected]);
+	        echo json_encode(['success' => true, 'affected_rows' => $affected, 'applied' => $applied]);
 	        exit;
 	    } catch (Exception $e) {
 	        error_log('validar_solicitud exception: ' . $e->getMessage());

@@ -315,5 +315,60 @@
     }
   </script>
 
+  <!-- Chatbot widget -->
+  <div class="chatbot-container">
+    <div class="chatbot-header">
+      <h5>Asistente Virtual</h5>
+      <button class="btn-close" onclick="toggleChatbot()"></button>
+    </div>
+    <div class="chatbot-body" id="chatBody">
+        <div class="chatbot-msg bot"><span class="bubble">Hola, escribe "menu" para ver las opciones de ayuda y dudas frecuentes para profesores.</span></div>
+    </div>
+    <div class="chatbot-input">
+      <input type="text" id="userInput" placeholder="Escribe tu mensaje...">
+      <button class="btn btn-primary" onclick="enviarMensaje()">Enviar</button>
+    </div>
+  </div>
+
+  <!-- Script para el chatbot -->
+  <script>
+    function toggleChatbot() {
+      const cont = document.querySelector('.chatbot-container');
+      cont.classList.toggle('active');
+      if (cont.classList.contains('active')) {
+        setTimeout(() => { cont.querySelector('#userInput').focus(); }, 300);
+      }
+    }
+
+    // Enviar mensaje del usuario
+    function enviarMensaje() {
+      const input = document.getElementById('userInput');
+      const texto = input.value.trim();
+      if (!texto) return;
+      agregarMensaje('user', texto);
+      input.value = '';
+
+      // Respuestas básicas del bot (simulación)
+      setTimeout(() => {
+        let respuesta = 'No entiendo tu pregunta.';
+        if (texto.toLowerCase().includes('menu')) {
+          respuesta = 'Opciones disponibles: 1. Cronograma 2. Calificaciones 3. Reportes';
+        } else if (texto.toLowerCase().includes('hola')) {
+          respuesta = '¡Hola! ¿En qué puedo ayudarte hoy?';
+        }
+        agregarMensaje('bot', respuesta);
+      }, 600);
+    }
+
+    // Agregar mensaje al chat
+    function agregarMensaje(tipo, texto) {
+      const div = document.createElement('div');
+      div.className = `chatbot-msg ${tipo}`;
+      div.innerHTML = `<span class="bubble">${escapeHtml(texto)}</span>`;
+      document.getElementById('chatBody').appendChild(div);
+      setTimeout(() => { div.scrollIntoView({ behavior: 'smooth' }); }, 50);
+    }
+  </script>
+
 </body>
 </html>
