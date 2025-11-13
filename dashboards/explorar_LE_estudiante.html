@@ -380,7 +380,7 @@
 
                 <div style="display:grid;grid-template-columns:1fr 360px;gap:18px;margin-top:18px;">
                     <div style="background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-                        <h4>Calendario de actividades</h4>
+                        <h4>Calendario de clases</h4>
                         <div id="fcStudentCalendar" style="margin-top:12px;"></div>
                     </div>
 
@@ -390,27 +390,9 @@
                             <div id="studentAverage" style="font-size:24px;color:#c8102e;margin-top:8px;">Cargando...</div>
                         </div>
 
-                        <div style="background:#fff;padding:16px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-                            <h5>Enviar solicitud al coordinador</h5>
-                            <form id="solicitudForm">
-                                <label style="display:block;margin-top:8px;">Tipo de solicitud</label>
-                                <select id="solicitudTipo" required style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;">
-                                    <option value="">Seleccione...</option>
-                                    <option>Inscripción LE</option>
-                                    <option>Cambio de línea</option>
-                                    <option>Homologación</option>
-                                    <option>Aplazamiento</option>
-                                    <option>Suplemento de créditos</option>
-                                    <option>Otro</option>
-                                </select>
-                                <label style="display:block;margin-top:8px;">Comentario</label>
-                                <textarea id="solicitudComentario" style="width:100%;min-height:100px;padding:8px;border-radius:6px;border:1px solid #ddd;"></textarea>
-                                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
-                                    <button type="submit" class="btn-select" style="background:#28a745;">Enviar</button>
-                                </div>
-                            </form>
-                            <div id="solicitudFeedback" style="margin-top:8px;"></div>
-                        </div>
+                        <!-- Se removió el formulario de "Enviar solicitud al coordinador"
+                             según especificación: los estudiantes con línea confirmada
+                             ya no deben enviar solicitudes desde esta vista. -->
                     </div>
                 </div>
             </section>
@@ -434,48 +416,7 @@
         // calcular promedio y mostrar
         cargarPromedio(usuarioId);
 
-        // registrar handler para enviar solicitud
-        const form = document.getElementById('solicitudForm');
-        if (form) {
-            form.addEventListener('submit', async function(e){
-                e.preventDefault();
-                const tipo = document.getElementById('solicitudTipo').value;
-                const desc = document.getElementById('solicitudComentario').value.trim();
-                if (!tipo) { alert('Seleccione el tipo de solicitud.'); return; }
-                const fd = new FormData();
-                fd.append('action','crear_solicitud');
-                fd.append('remitente_id', usuarioId);
-                fd.append('tipo', tipo);
-                fd.append('descripcion', desc);
-                // opcional: incluir linea_id para mayor contexto
-                if (linea && linea.linea_enfasis_id) fd.append('linea_enfasis_id', linea.linea_enfasis_id);
-
-                try {
-                    const resp = await fetch('../php/coordinador_actions.php', { method:'POST', body: fd });
-                    const j = await resp.json();
-                    const fb = document.getElementById('solicitudFeedback');
-                    if (j.success) {
-                        fb.innerHTML = '<div style="color:#155724;">Solicitud enviada correctamente.</div>';
-                        form.reset();
-                        // Mostrar toast de confirmación
-                        try { showToast('Solicitud enviada correctamente.', 'success', 4500); } catch(e){}
-                        // Abrir y refrescar el modal "Mis Solicitudes" para que el usuario vea su solicitud inmediatamente
-                        try {
-                            const modal = document.getElementById('modalMisSolicitudes');
-                            if (modal) modal.style.display = 'flex';
-                            if (typeof mostrarMisSolicitudes === 'function') mostrarMisSolicitudes(usuarioId, true);
-                        } catch (e) { console.warn('No fue posible autoabrir/actualizar Mis Solicitudes', e); }
-                        // opcional: notificar al coordinador por otros medios
-                    } else {
-                        fb.innerHTML = '<div style="color:#c00;">No fue posible enviar la solicitud.</div>';
-                        console.warn('crear_solicitud', j);
-                    }
-                } catch (err) {
-                    console.error('enviar solicitud error', err);
-                    document.getElementById('solicitudFeedback').innerHTML = '<div style="color:#c00;">Error de conexión.</div>';
-                }
-            });
-        }
+        // El formulario de envío de solicitudes fue removido de la vista 'Mi Línea'.
     }
 
     // Cargar actividades del alumno y ponerlas en el calendario
@@ -509,7 +450,7 @@
                 if (notas.length > 0) {
                     const sum = notas.reduce((s,v)=>s+v,0);
                     const avg = (sum / notas.length).toFixed(2);
-                    avgText = avg + ' / 100';
+                    avgText = avg + ' / 5.00';
                 }
             }
             const el = document.getElementById('studentAverage');

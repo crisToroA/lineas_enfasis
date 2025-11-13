@@ -293,25 +293,66 @@ try {
 	        echo json_encode(['success' => false, 'message' => 'ID de curso inválido']);
 	        exit;
 	    }
-	    $sql = "SELECT cal.estudiante_id, u.nombre, u.documento, cal.nota
-	            FROM calificaciones cal
-	            JOIN usuarios u ON cal.estudiante_id = u.id
-	            WHERE cal.curso_id = ?
-	            ORDER BY u.nombre ASC";
-	    $stmt = $conn->prepare($sql);
-	    if (!$stmt) {
-	        error_log('list_estudiantes_curso prepare error: ' . $conn->error);
-	        echo json_encode(['success' => false, 'message' => 'Error interno al preparar consulta']);
+	    try {
+	        // Obtener la línea de énfasis asociada al curso
+	        $q = $conn->prepare("SELECT linea_enfasis_id FROM cursos WHERE id = ? LIMIT 1");
+	        if ($q) {
+	            $q->bind_param('i', $curso_id);
+	            $q->execute();
+	            $row = $q->get_result()->fetch_assoc();
+	            $q->close();
+	        } else {
+	            $row = null;
+	        }
+
+	        $estudiantes = [];
+
+	        if ($row && !empty($row['linea_enfasis_id'])) {
+	            $linea_id = intval($row['linea_enfasis_id']);
+	            // Seleccionar estudiantes inscritos en la misma línea (estado confirmada)
+	            // y obtener su nota en este curso si existe (LEFT JOIN calificaciones)
+	            $sql = "SELECT u.id AS estudiante_id, u.nombre, u.documento, cal.nota
+	                    FROM usuarios u
+	                    JOIN inscripciones i ON i.usuario_id = u.id AND i.linea_enfasis_id = ? AND i.estado = 'confirmada'
+	                    LEFT JOIN calificaciones cal ON cal.curso_id = ? AND cal.estudiante_id = u.id
+	                    ORDER BY u.nombre ASC";
+	            $stmt = $conn->prepare($sql);
+	            if ($stmt) {
+	                $stmt->bind_param('ii', $linea_id, $curso_id);
+	                $stmt->execute();
+	                $result = $stmt->get_result();
+	                while ($r = $result->fetch_assoc()) $estudiantes[] = $r;
+	                $stmt->close();
+	            } else {
+	                error_log('list_estudiantes_curso prepare (inscripciones) failed: ' . $conn->error);
+	            }
+	        }
+
+	        // Si no encontramos inscripciones (o no hay línea asociada), intentamos fallback
+	        if (empty($estudiantes)) {
+	            // Fallback: devolver quienes tienen registro en calificaciones para ese curso
+	            $sql2 = "SELECT cal.estudiante_id, u.nombre, u.documento, cal.nota
+	                     FROM calificaciones cal
+	                     JOIN usuarios u ON cal.estudiante_id = u.id
+	                     WHERE cal.curso_id = ?
+	                     ORDER BY u.nombre ASC";
+	            $s2 = $conn->prepare($sql2);
+	            if ($s2) {
+	                $s2->bind_param('i', $curso_id);
+	                $s2->execute();
+	                $res2 = $s2->get_result();
+	                while ($rr = $res2->fetch_assoc()) $estudiantes[] = $rr;
+	                $s2->close();
+	            }
+	        }
+
+	        echo json_encode(['success' => true, 'data' => $estudiantes]);
+	        exit;
+	    } catch (Exception $e) {
+	        error_log('list_estudiantes_curso exception: ' . $e->getMessage());
+	        echo json_encode(['success' => false, 'message' => 'Error interno al obtener estudiantes']);
 	        exit;
 	    }
-	    $stmt->bind_param('i', $curso_id);
-	    $stmt->execute();
-	    $result = $stmt->get_result();
-	    $estudiantes = [];
-	    while ($row = $result->fetch_assoc()) {
-	        $estudiantes[] = $row;
-	    }
-	    echo json_encode(['success' => true, 'data' => $estudiantes]);
 	    exit;
 	}
 
