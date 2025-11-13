@@ -212,8 +212,16 @@
         const res = await fetch('../php/coordinador_actions.php', { method: 'POST', body: fd });
         const j = await res.json();
         if (j.success) {
+          // Guardar flag para que la página de exploración abra el modal "Mis Solicitudes"
+          try { localStorage.setItem('openMisSolicitudesAfterRedirect', '1'); } catch(e){}
+          // opcional: guardar el id de la solicitud para resaltar
+          if (j.solicitud_id) {
+            try { localStorage.setItem('recentSolicitudId', String(j.solicitud_id)); } catch(e){}
+          }
           alert(j.message || 'Solicitud enviada al coordinador.');
           confirmModal.style.display = 'none';
+          // redirigir al explorador y abrir automáticamente el modal allí
+          window.location.href = 'explorar_LE_estudiante.html';
         } else {
           alert('No se pudo enviar la solicitud: ' + (j.message || 'error'));
         }

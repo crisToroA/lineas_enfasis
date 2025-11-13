@@ -97,6 +97,9 @@
         </div>
     </div>
 
+    <!-- Toast container para notificaciones rápidas -->
+    <div id="toastContainer" style="position:fixed;right:16px;bottom:16px;z-index:10000;display:flex;flex-direction:column;gap:8px;align-items:flex-end;"></div>
+
     <script>
     // Añadido: función segura para escapar HTML usada por renderLines y otros
     function escapeHtml(text) {
@@ -107,6 +110,31 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    // Toast helper: mostrar notificaciones rápidas (tipo: 'info'|'success'|'error')
+    function showToast(message, type = 'info', duration = 4000) {
+        try {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            const toast = document.createElement('div');
+            toast.textContent = message;
+            toast.style.background = type === 'success' ? '#28a745' : (type === 'error' ? '#c53636' : '#333');
+            toast.style.color = '#fff';
+            toast.style.padding = '10px 14px';
+            toast.style.borderRadius = '8px';
+            toast.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+            toast.style.opacity = '1';
+            toast.style.transition = 'opacity 0.35s, transform 0.35s';
+            toast.style.transform = 'translateY(0)';
+            container.appendChild(toast);
+            // auto-dismiss
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 360);
+            }, duration);
+        } catch (e) { console.warn('showToast error', e); }
     }
 
     (function(){
@@ -429,6 +457,14 @@
                     if (j.success) {
                         fb.innerHTML = '<div style="color:#155724;">Solicitud enviada correctamente.</div>';
                         form.reset();
+                        // Mostrar toast de confirmación
+                        try { showToast('Solicitud enviada correctamente.', 'success', 4500); } catch(e){}
+                        // Abrir y refrescar el modal "Mis Solicitudes" para que el usuario vea su solicitud inmediatamente
+                        try {
+                            const modal = document.getElementById('modalMisSolicitudes');
+                            if (modal) modal.style.display = 'flex';
+                            if (typeof mostrarMisSolicitudes === 'function') mostrarMisSolicitudes(usuarioId, true);
+                        } catch (e) { console.warn('No fue posible autoabrir/actualizar Mis Solicitudes', e); }
                         // opcional: notificar al coordinador por otros medios
                     } else {
                         fb.innerHTML = '<div style="color:#c00;">No fue posible enviar la solicitud.</div>';
@@ -490,6 +526,25 @@
         }
         // si no tiene línea, cargar la vista de exploración normal
         cargarLineasEstudiante();
+    });
+
+    // Si venimos de crear una solicitud (linea_detail), abrir automáticamente el modal "Mis Solicitudes"
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            const openFlag = localStorage.getItem('openMisSolicitudesAfterRedirect');
+            if (openFlag && openFlag === '1') {
+                const uid = parseInt(localStorage.getItem('currentUserId') || 0, 10);
+                // limpiar flag inmediatamente para evitar re-aperturas
+                localStorage.removeItem('openMisSolicitudesAfterRedirect');
+                if (uid) {
+                    // abrir modal y cargar solicitudes
+                    document.getElementById('modalMisSolicitudes').style.display = 'flex';
+                    if (typeof mostrarMisSolicitudes === 'function') mostrarMisSolicitudes(uid, true);
+                    // opcional: limpiar recentSolicitudId
+                    localStorage.removeItem('recentSolicitudId');
+                }
+            }
+        } catch (e) { console.warn('auto open mis solicitudes error', e); }
     });
 
     // ...existing code...
@@ -571,14 +626,18 @@ async function mostrarMisSolicitudes(usuarioId, forModal = false) {
                 dbg.textContent = 'No tienes solicitudes registradas.';
                 return;
             }
-            // render con más detalle
+            // render con más detalle; traducir estado para presentación del estudiante
             const html = j.data.map(s => {
-                const estado = s.estado || 'pendiente';
-                const comentario = s.comentario_coordinador ? `<div style="margin-top:6px;color:#155724;"><b>Respuesta:</b> ${s.comentario_coordinador}</div>` : '';
-                const linea = s.linea_enfasis_id ? ` • Línea: ${s.linea_enfasis_id}` : '';
+                let estado = (s.estado || 'pendiente').toLowerCase();
+                let estadoLabel = '';
+                if (estado === 'pendiente') estadoLabel = '<span style="color:#856404;background:#fff3cd;padding:4px 8px;border-radius:6px;">Pendiente</span>';
+                else if (estado === 'aprobada') estadoLabel = '<span style="color:#155724;background:#e6f4ea;padding:4px 8px;border-radius:6px;">Completada</span>';
+                else if (estado === 'rechazada') estadoLabel = '<span style="color:#721c24;background:#f8d7da;padding:4px 8px;border-radius:6px;">Rechazada</span>';
+                const comentario = s.comentario_coordinador ? `<div style="margin-top:6px;color:#155724;"><b>Respuesta:</b> ${escapeHtml(s.comentario_coordinador)}</div>` : '';
+                const linea = s.linea_enfasis_id ? ` • Línea: ${escapeHtml(String(s.linea_enfasis_id))}` : '';
                 return `<div style="padding:10px;border-bottom:1px solid #eee;">
-                            <div><b>#${s.id}</b> — ${s.tipo} — <i>${estado}</i> — ${s.fecha}${linea}</div>
-                            <div style="color:#444;margin-top:6px;">${s.descripcion || ''}</div>
+                            <div><b>#${escapeHtml(String(s.id))}</b> — ${escapeHtml(s.tipo || '')} — ${estadoLabel} — <small style="color:#666;">${escapeHtml(s.fecha || '')}${linea}</small></div>
+                            <div style="color:#444;margin-top:6px;">${escapeHtml(s.descripcion || '')}</div>
                             ${comentario}
                         </div>`;
             }).join('');
