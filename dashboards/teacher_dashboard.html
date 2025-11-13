@@ -6,6 +6,7 @@
   <title>Dashboard Profesor</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../CSS/teacher´s_dashboard.css">
+  <link rel="stylesheet" href="../CSS/chatbot.css">
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 </head>
@@ -316,59 +317,112 @@
   </script>
 
   <!-- Chatbot widget -->
-  <div class="chatbot-container">
-    <div class="chatbot-header">
-      <h5>Asistente Virtual</h5>
-      <button class="btn-close" onclick="toggleChatbot()"></button>
-    </div>
+  <button class="chatbot-button" id="openChat">💬</button>
+  <div class="chatbot-modal" id="chatModal" style="display:none;">
+    <div class="chatbot-header">Asistente Virtual</div>
     <div class="chatbot-body" id="chatBody">
         <div class="chatbot-msg bot"><span class="bubble">Hola, escribe "menu" para ver las opciones de ayuda y dudas frecuentes para profesores.</span></div>
     </div>
     <div class="chatbot-input">
-      <input type="text" id="userInput" placeholder="Escribe tu mensaje...">
-      <button class="btn btn-primary" onclick="enviarMensaje()">Enviar</button>
+      <textarea id="chatInput" placeholder="Escribe tu pregunta..."></textarea>
+      <button id="sendChat" style="background:#c41e3a;color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;">Enviar</button>
     </div>
   </div>
 
   <!-- Script para el chatbot -->
   <script>
-    function toggleChatbot() {
-      const cont = document.querySelector('.chatbot-container');
-      cont.classList.toggle('active');
-      if (cont.classList.contains('active')) {
-        setTimeout(() => { cont.querySelector('#userInput').focus(); }, 300);
-      }
+    // Función para escapar HTML
+    function escapeHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
-    // Enviar mensaje del usuario
-    function enviarMensaje() {
-      const input = document.getElementById('userInput');
-      const texto = input.value.trim();
-      if (!texto) return;
-      agregarMensaje('user', texto);
-      input.value = '';
+    (function(){
+        const openBtn = document.getElementById('openChat');
+        const modal = document.getElementById('chatModal');
+        const sendBtn = document.getElementById('sendChat');
+        const input = document.getElementById('chatInput');
+        const body = document.getElementById('chatBody');
+        const endpoint = '../php/chatbot_profesor.php';
 
-      // Respuestas básicas del bot (simulación)
-      setTimeout(() => {
-        let respuesta = 'No entiendo tu pregunta.';
-        if (texto.toLowerCase().includes('menu')) {
-          respuesta = 'Opciones disponibles: 1. Cronograma 2. Calificaciones 3. Reportes';
-        } else if (texto.toLowerCase().includes('hola')) {
-          respuesta = '¡Hola! ¿En qué puedo ayudarte hoy?';
+        openBtn.addEventListener('click', () => {
+            modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+        });
+
+        function appendMessage(from, text) {
+            const div = document.createElement('div');
+            div.className = 'chatbot-msg ' + (from === 'user' ? 'user' : 'bot');
+            div.innerHTML = `<span class="bubble">${text}</span>`;
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
         }
-        agregarMensaje('bot', respuesta);
-      }, 600);
-    }
 
-    // Agregar mensaje al chat
-    function agregarMensaje(tipo, texto) {
-      const div = document.createElement('div');
-      div.className = `chatbot-msg ${tipo}`;
-      div.innerHTML = `<span class="bubble">${escapeHtml(texto)}</span>`;
-      document.getElementById('chatBody').appendChild(div);
-      setTimeout(() => { div.scrollIntoView({ behavior: 'smooth' }); }, 50);
-    }
-  </script>
+        sendBtn.addEventListener('click', () => {
+            const q = input.value.trim();
+            if (!q) return;
+            const usuario_id = localStorage.getItem('currentUserId') || '';
+            appendMessage('user', q);
+            input.value = '';
+            appendMessage('bot', 'Escribiendo...');
+
+            fetch(endpoint, {
+                method: 'POST',
+                body: new URLSearchParams({ q: q, usuario_id: usuario_id })
+            })
+            .then(r => r.json())
+            .then(res => {
+                // Remover mensaje "Escribiendo..."
+                const messages = body.querySelectorAll('.chatbot-msg');
+                if (messages.length > 0) {
+                    const lastMsg = messages[messages.length - 1];
+                    if (lastMsg.textContent.includes('Escribiendo')) {
+                        lastMsg.remove();
+                    }
+                }
+                
+                if (res.success && res.answer) {
+                    appendMessage('bot', res.answer);
+                    // Mostrar sugerencias si existen
+                    if (res.suggestions && typeof res.suggestions === 'object') {
+                        for (let [url, label] of Object.entries(res.suggestions)) {
+                            const linkMsg = `<a href="${escapeHtml(url)}" style="color:#0066cc;text-decoration:underline;">${escapeHtml(label)}</a>`;
+                            const div = document.createElement('div');
+                            div.className = 'chatbot-msg bot';
+                            div.innerHTML = `<span class="bubble">${linkMsg}</span>`;
+                            body.appendChild(div);
+                        }
+                    }
+                } else {
+                    appendMessage('bot', 'Error al procesar tu mensaje. Intenta más tarde.');
+                }
+            })
+            .catch(err => {
+                console.error('Error:', err);
+                // Remover mensaje "Escribiendo..."
+                const messages = body.querySelectorAll('.chatbot-msg');
+                if (messages.length > 0) {
+                    const lastMsg = messages[messages.length - 1];
+                    if (lastMsg.textContent.includes('Escribiendo')) {
+                        lastMsg.remove();
+                    }
+                }
+                appendMessage('bot', 'Error de conexión. Intenta más tarde.');
+            });
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendBtn.click();
+            }
+        });
+    })();
+    </script>
 
 </body>
 </html>

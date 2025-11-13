@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS reportes_coordinador (
     curso_id INT NOT NULL,
     tipo ENUM('inasistencias','notas','otro') NOT NULL,
     contenido TEXT NOT NULL,
-    enviado_por INT NOT NULL,
+    enviado_por INT NULL,
     fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     procesado TINYINT(1) DEFAULT 0,
     FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE CASCADE,
@@ -275,7 +275,8 @@ CREATE TABLE IF NOT EXISTS actividades (
 -- Ejemplos: actividades para CLD002 (Cálculo Diferencial) si existe
 INSERT IGNORE INTO actividades (titulo, descripcion, fecha_entrega, curso_id, prioridad)
 SELECT 'Entrega taller 1: Límites', 'Resolver ejercicios 1-10 del taller y subir PDF.', DATE_ADD(CURDATE(), INTERVAL 7 DAY), c.id, 'alta'
-FROM cursos c WHERE c.codigo = 'CLD002' LIMIT 1
+FROM cursos c WHERE c.codigo = 'CLD002'
 UNION ALL
 SELECT 'Quiz 1: Derivadas', 'Pequeña evaluación online sobre derivadas.', DATE_ADD(CURDATE(), INTERVAL 12 DAY), c.id, 'media'
-FROM cursos c WHERE c.codigo = 'CLD002' LIMIT 1;
+FROM cursos c WHERE c.codigo = 'CLD002'
+LIMIT 1;

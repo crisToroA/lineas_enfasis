@@ -84,6 +84,31 @@
                         </div>
 
                         <div class="form-group">
+                            <label><span class="label-icon">📅</span> Día de la Semana</label>
+                            <select id="curso_dia" name="dia">
+                                <option value="">Seleccione un día</option>
+                                <option value="Lunes">Lunes</option>
+                                <option value="Martes">Martes</option>
+                                <option value="Miércoles">Miércoles</option>
+                                <option value="Jueves">Jueves</option>
+                                <option value="Viernes">Viernes</option>
+                            </select>
+                            <div class="helper-text">Día en el que se impartirá el curso.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label><span class="label-icon">⏰</span> Hora de Inicio</label>
+                            <input type="time" id="curso_hora_inicio" name="hora_inicio">
+                            <div class="helper-text">Hora de inicio de la clase.</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label><span class="label-icon">⏰</span> Hora de Fin</label>
+                            <input type="time" id="curso_hora_fin" name="hora_fin">
+                            <div class="helper-text">Hora de finalización de la clase.</div>
+                        </div>
+
+                        <div class="form-group">
                             <label><span class="label-icon">📝</span> Notas/Observaciones (opcional)</label>
                             <input type="text" id="curso_observaciones" name="observaciones" placeholder="Ej: Requiere laboratorio complementario">
                         </div>
@@ -272,9 +297,12 @@ document.getElementById('registroCursoForm').addEventListener('submit', async fu
     const semestre = document.getElementById('curso_semestre').value;
     const profesor_id = document.getElementById('profesorSelect').value;
     const linea_enfasis_id = document.getElementById('lineaEnfasisSelect').value;
+    const dia = document.getElementById('curso_dia').value.trim();
+    const hora_inicio = document.getElementById('curso_hora_inicio').value.trim();
+    const hora_fin = document.getElementById('curso_hora_fin').value.trim();
 
     if (!nombre || !codigo || !semestre || !profesor_id || !linea_enfasis_id) {
-        alert('Complete todos los campos del formulario.');
+        alert('Complete todos los campos obligatorios del formulario.');
         return;
     }
 
@@ -285,6 +313,9 @@ document.getElementById('registroCursoForm').addEventListener('submit', async fu
     formData.append('semestre', semestre);
     formData.append('profesor_id', profesor_id);
     formData.append('linea_enfasis_id', linea_enfasis_id);
+    formData.append('dia', dia);
+    formData.append('hora_inicio', hora_inicio);
+    formData.append('hora_fin', hora_fin);
 
     try {
         const res = await fetch('../php/coordinador_actions.php', {
@@ -719,13 +750,24 @@ document.getElementById('registroCursoForm').addEventListener('submit', async fu
     </div>
 
     <script>
+    // Función para escapar HTML
+    function escapeHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     (function(){
         const openBtn = document.getElementById('openChat');
         const modal = document.getElementById('chatModal');
         const sendBtn = document.getElementById('sendChat');
         const input = document.getElementById('chatInput');
         const body = document.getElementById('chatBody');
-        const endpoint = '../php/chatbot_api.php';
+        const endpoint = '../php/chatbot_coordinador.php';
 
         openBtn.addEventListener('click', () => {
             modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
@@ -753,25 +795,41 @@ document.getElementById('registroCursoForm').addEventListener('submit', async fu
             })
             .then(r => r.json())
             .then(res => {
-                const typing = Array.from(body.querySelectorAll('.chatbot-msg.bot')).pop();
-                if (typing && typing.textContent.trim() === 'Escribiendo...') typing.remove();
-
-                if (res.success) {
+                // Remover mensaje "Escribiendo..."
+                const messages = body.querySelectorAll('.chatbot-msg');
+                if (messages.length > 0) {
+                    const lastMsg = messages[messages.length - 1];
+                    if (lastMsg.textContent.includes('Escribiendo')) {
+                        lastMsg.remove();
+                    }
+                }
+                
+                if (res.success && res.answer) {
                     appendMessage('bot', res.answer);
-                    if (res.suggestions && Object.keys(res.suggestions).length) {
-                        const keys = Object.keys(res.suggestions);
-                        const linksHtml = keys.map(k => `<div class="chatbot-suggestion"><a href="${k}">${res.suggestions[k]}</a></div>`).join('');
-                        const div = document.createElement('div');
-                        div.className = 'chatbot-msg bot';
-                        div.innerHTML = `<span class="bubble">${linksHtml}</span>`;
-                        body.appendChild(div);
-                        body.scrollTop = body.scrollHeight;
+                    // Mostrar sugerencias si existen
+                    if (res.suggestions && typeof res.suggestions === 'object') {
+                        for (let [url, label] of Object.entries(res.suggestions)) {
+                            const linkMsg = `<a href="${escapeHtml(url)}" style="color:#0066cc;text-decoration:underline;">${escapeHtml(label)}</a>`;
+                            const div = document.createElement('div');
+                            div.className = 'chatbot-msg bot';
+                            div.innerHTML = `<span class="bubble">${linkMsg}</span>`;
+                            body.appendChild(div);
+                        }
                     }
                 } else {
-                    appendMessage('bot', 'Lo siento, ocurrió un error al procesar tu consulta.');
+                    appendMessage('bot', 'Error al procesar tu mensaje. Intenta más tarde.');
                 }
             })
-            .catch(() => {
+            .catch(err => {
+                console.error('Error:', err);
+                // Remover mensaje "Escribiendo..."
+                const messages = body.querySelectorAll('.chatbot-msg');
+                if (messages.length > 0) {
+                    const lastMsg = messages[messages.length - 1];
+                    if (lastMsg.textContent.includes('Escribiendo')) {
+                        lastMsg.remove();
+                    }
+                }
                 appendMessage('bot', 'Error de conexión. Intenta más tarde.');
             });
         });

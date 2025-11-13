@@ -123,12 +123,43 @@ try {
 	    exit;
 	}
 
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list_mis_cursos_profesor') {
+	    $profesor_id = intval($_GET['profesor_id'] ?? 0);
+	    if ($profesor_id <= 0) {
+	        echo json_encode(['success' => false, 'message' => 'ID de profesor inválido']);
+	        exit;
+	    }
+	    $sql = "SELECT c.id, c.nombre, c.codigo, c.semestre, c.dia, c.hora_inicio, c.hora_fin, le.nombre AS linea_enfasis
+	            FROM cursos c
+	            JOIN lineas_enfasis le ON c.linea_enfasis_id = le.id
+	            WHERE c.profesor_id = ?
+	            ORDER BY c.semestre DESC, c.nombre ASC";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) {
+	        error_log('list_mis_cursos_profesor prepare error: ' . $conn->error);
+	        echo json_encode(['success' => false, 'message' => 'Error interno al preparar consulta']);
+	        exit;
+	    }
+	    $stmt->bind_param('i', $profesor_id);
+	    $stmt->execute();
+	    $result = $stmt->get_result();
+	    $cursos = [];
+	    while ($row = $result->fetch_assoc()) {
+	        $cursos[] = $row;
+	    }
+	    echo json_encode(['success' => true, 'data' => $cursos]);
+	    exit;
+	}
+
 	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'registrar_curso') {
 	    $nombre = trim($_POST['nombre'] ?? '');
 	    $codigo = trim($_POST['codigo'] ?? '');
 	    $semestre = trim($_POST['semestre'] ?? '');
 	    $profesor_id = intval($_POST['profesor_id'] ?? 0);
 	    $linea_enfasis_id = intval($_POST['linea_enfasis_id'] ?? 0);
+	    $dia = trim($_POST['dia'] ?? '');
+	    $hora_inicio = trim($_POST['hora_inicio'] ?? '');
+	    $hora_fin = trim($_POST['hora_fin'] ?? '');
 
 	    if ($nombre === '' || $codigo === '' || $semestre === '' || $profesor_id <= 0 || $linea_enfasis_id <= 0) {
 	        echo json_encode(['success' => false, 'message' => 'Faltan datos requeridos.']);
@@ -167,15 +198,15 @@ try {
 	        exit;
 	    }
 
-	    // Insertar curso
-	    $ins = "INSERT INTO cursos (nombre, codigo, semestre, profesor_id, linea_enfasis_id) VALUES (?, ?, ?, ?, ?)";
+	    // Insertar curso con día y horarios
+	    $ins = "INSERT INTO cursos (nombre, codigo, semestre, profesor_id, linea_enfasis_id, dia, hora_inicio, hora_fin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 	    $istmt = $conn->prepare($ins);
 	    if (!$istmt) {
 	        error_log('prepare insertar curso error: ' . $conn->error);
 	        echo json_encode(['success' => false, 'message' => 'Error de preparación SQL al guardar curso.']);
 	        exit;
 	    }
-	    $istmt->bind_param('sssii', $nombre, $codigo, $semestre, $profesor_id, $linea_enfasis_id);
+	    $istmt->bind_param('sssiiiss', $nombre, $codigo, $semestre, $profesor_id, $linea_enfasis_id, $dia, $hora_inicio, $hora_fin);
 
 	    if ($istmt->execute()) {
 	        echo json_encode(['success' => true, 'course_id' => $conn->insert_id]);
@@ -253,6 +284,62 @@ try {
 	    $stmt->bind_param('i', $curso_id);
 	    $ok = $stmt->execute();
 	    echo json_encode(['success' => $ok]);
+	    exit;
+	}
+
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'list_estudiantes_curso') {
+	    $curso_id = intval($_GET['curso_id'] ?? 0);
+	    if ($curso_id <= 0) {
+	        echo json_encode(['success' => false, 'message' => 'ID de curso inválido']);
+	        exit;
+	    }
+	    $sql = "SELECT cal.estudiante_id, u.nombre, u.documento, cal.nota
+	            FROM calificaciones cal
+	            JOIN usuarios u ON cal.estudiante_id = u.id
+	            WHERE cal.curso_id = ?
+	            ORDER BY u.nombre ASC";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) {
+	        error_log('list_estudiantes_curso prepare error: ' . $conn->error);
+	        echo json_encode(['success' => false, 'message' => 'Error interno al preparar consulta']);
+	        exit;
+	    }
+	    $stmt->bind_param('i', $curso_id);
+	    $stmt->execute();
+	    $result = $stmt->get_result();
+	    $estudiantes = [];
+	    while ($row = $result->fetch_assoc()) {
+	        $estudiantes[] = $row;
+	    }
+	    echo json_encode(['success' => true, 'data' => $estudiantes]);
+	    exit;
+	}
+
+	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'guardar_nota') {
+	    $curso_id = intval($_POST['curso_id'] ?? 0);
+	    $estudiante_id = intval($_POST['estudiante_id'] ?? 0);
+	    $nota = trim($_POST['nota'] ?? '');
+	    
+	    if ($curso_id <= 0 || $estudiante_id <= 0) {
+	        echo json_encode(['success' => false, 'message' => 'Datos inválidos']);
+	        exit;
+	    }
+	    
+	    // Convertir nota a decimal o null
+	    $notaVal = ($nota !== '' && $nota !== null) ? floatval($nota) : null;
+	    
+	    // Usar INSERT ... ON DUPLICATE KEY UPDATE
+	    $sql = "INSERT INTO calificaciones (curso_id, estudiante_id, nota) VALUES (?, ?, ?) 
+	            ON DUPLICATE KEY UPDATE nota = VALUES(nota), fecha_actualizacion = NOW()";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) {
+	        error_log('guardar_nota prepare error: ' . $conn->error);
+	        echo json_encode(['success' => false, 'message' => 'Error interno']);
+	        exit;
+	    }
+	    $stmt->bind_param('iid', $curso_id, $estudiante_id, $notaVal);
+	    $ok = $stmt->execute();
+	    echo json_encode(['success' => $ok, 'message' => $ok ? 'Nota guardada correctamente' : 'Error al guardar nota']);
 	    exit;
 	}
 
@@ -747,6 +834,33 @@ try {
 	    exit;
 	}
 
+	// Acción: enviar reporte del profesor al coordinador
+	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'enviar_reporte_coordinador') {
+	    $curso_id = intval($_POST['curso_id'] ?? 0);
+	    $tipo = trim($_POST['tipo'] ?? '');
+	    $contenido = trim($_POST['contenido'] ?? '');
+	    $enviado_por = intval($_POST['enviado_por'] ?? 0);
+	    
+	    if ($curso_id <= 0 || $contenido === '') {
+	        echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+	        exit;
+	    }
+	    
+	    // Insertar en tabla reportes_coordinador
+	    $sql = "INSERT INTO reportes_coordinador (curso_id, tipo, contenido, enviado_por) VALUES (?, ?, ?, ?)";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) {
+	        error_log('enviar_reporte_coordinador prepare error: ' . $conn->error);
+	        echo json_encode(['success' => false, 'message' => 'Error interno']);
+	        exit;
+	    }
+	    $tipoVal = $tipo ?: 'otro';
+	    $stmt->bind_param('issi', $curso_id, $tipoVal, $contenido, $enviado_por);
+	    $ok = $stmt->execute();
+	    echo json_encode(['success' => $ok, 'message' => $ok ? 'Reporte enviado correctamente' : 'Error al enviar reporte']);
+	    exit;
+	}
+
 	// Nueva acción: crear solicitud genérica desde UI estudiante (tipo + descripcion + opcional linea/curso)
 	if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'crear_solicitud') {
 	    $remitente = intval($_POST['remitente_id'] ?? 0);
@@ -775,6 +889,93 @@ try {
 	        error_log('crear_solicitud exception: ' . $e->getMessage());
 	        echo json_encode(['success'=>false,'message'=>'Error interno']);
 	    }
+	    exit;
+	}
+
+	// Acción: obtener la línea de énfasis del estudiante (si está inscrito)
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'get_mi_linea') {
+	    $usuario_id = intval($_GET['usuario_id'] ?? 0);
+	    if ($usuario_id <= 0) {
+	        echo json_encode(['success' => false, 'message' => 'ID inválido']);
+	        exit;
+	    }
+	    $sql = "SELECT i.id, i.linea_enfasis_id, le.nombre, le.duracion, le.creditos, le.cupos, le.descripcion
+	            FROM inscripciones i
+	            JOIN lineas_enfasis le ON i.linea_enfasis_id = le.id
+	            WHERE i.usuario_id = ? AND i.estado = 'confirmada'
+	            ORDER BY i.fecha DESC";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) {
+	        error_log('get_mi_linea prepare error: ' . $conn->error);
+	        echo json_encode(['success' => false, 'message' => 'Error interno']);
+	        exit;
+	    }
+	    $stmt->bind_param('i', $usuario_id);
+	    $stmt->execute();
+	    $result = $stmt->get_result();
+	    $lineas = [];
+	    while ($row = $result->fetch_assoc()) {
+	        $lineas[] = $row;
+	    }
+	    echo json_encode(['success' => true, 'data' => $lineas]);
+	    exit;
+	}
+
+	// Acción: obtener las solicitudes del estudiante
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'mis_solicitudes') {
+	    $usuario_id = intval($_GET['usuario_id'] ?? 0);
+	    if ($usuario_id <= 0) {
+	        echo json_encode(['success' => false, 'message' => 'ID inválido']);
+	        exit;
+	    }
+	    $sql = "SELECT s.id, s.tipo, s.descripcion, s.estado, s.fecha, s.comentario_coordinador, s.linea_enfasis_id
+	            FROM solicitudes s
+	            WHERE s.remitente_id = ?
+	            ORDER BY s.fecha DESC";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) {
+	        error_log('mis_solicitudes prepare error: ' . $conn->error);
+	        echo json_encode(['success' => false, 'message' => 'Error interno']);
+	        exit;
+	    }
+	    $stmt->bind_param('i', $usuario_id);
+	    $stmt->execute();
+	    $result = $stmt->get_result();
+	    $solicitudes = [];
+	    while ($row = $result->fetch_assoc()) {
+	        $solicitudes[] = $row;
+	    }
+	    echo json_encode(['success' => true, 'data' => $solicitudes]);
+	    exit;
+	}
+
+	// Acción: obtener las notas del estudiante
+	if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'mis_notas') {
+	    $usuario_id = intval($_GET['usuario_id'] ?? 0);
+	    if ($usuario_id <= 0) {
+	        echo json_encode(['success' => false, 'message' => 'ID inválido']);
+	        exit;
+	    }
+	    $sql = "SELECT c.id AS curso_id, c.nombre AS curso_nombre, c.codigo AS curso_codigo, c.semestre, 
+	                   cal.nota
+	            FROM calificaciones cal
+	            JOIN cursos c ON cal.curso_id = c.id
+	            WHERE cal.estudiante_id = ?
+	            ORDER BY c.semestre DESC, c.nombre ASC";
+	    $stmt = $conn->prepare($sql);
+	    if (!$stmt) {
+	        error_log('mis_notas prepare error: ' . $conn->error);
+	        echo json_encode(['success' => false, 'message' => 'Error interno']);
+	        exit;
+	    }
+	    $stmt->bind_param('i', $usuario_id);
+	    $stmt->execute();
+	    $result = $stmt->get_result();
+	    $notas = [];
+	    while ($row = $result->fetch_assoc()) {
+	        $notas[] = $row;
+	    }
+	    echo json_encode(['success' => true, 'data' => $notas]);
 	    exit;
 	}
 
