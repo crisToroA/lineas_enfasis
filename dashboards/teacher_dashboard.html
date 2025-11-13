@@ -148,12 +148,22 @@
         // actualizar calendario con eventos
         if (window.calendar) {
             window.calendar.removeAllEvents();
+            try { console.log('list_mis_cursos_profesor (cursos):', cursos); } catch(e){}
+            // helper para mapear día (puede ser número string "0"-"6" o nombre en español)
+            function parseDia(dia) {
+                if (dia === null || dia === undefined) return null;
+                const asNum = parseInt(dia, 10);
+                if (!isNaN(asNum) && asNum >= 0 && asNum <= 6) {
+                    return asNum; // 0-6 directamente
+                }
+                const dowMap = { 'lunes':1,'martes':2,'miercoles':3,'miércoles':3,'jueves':4,'viernes':5,'sábado':6,'sabado':6,'domingo':0 };
+                const norm = String(dia).trim().toLowerCase().replace(/í/g,'i').replace(/ó/g,'o').replace(/á/g,'a').replace(/é/g,'e').replace(/ú/g,'u').replace(/ñ/g,'n');
+                return dowMap[norm] !== undefined ? dowMap[norm] : null;
+            }
             cursos.forEach(c => {
-                if (c.dia && c.hora_inicio) {
-                    // crear evento semanal: FullCalendar puede usar dow + time; aquí simplificamos creando eventos próximos (próxima semana día correspondiente)
-                    const dowMap = { 'Lunes':1,'Martes':2,'Miércoles':3,'Miercoles':3,'Jueves':4,'Viernes':5,'Sábado':6,'Sabado':6,'Domingo':0 };
-                    const dow = dowMap[c.dia] ?? null;
-                    if (dow !== null) {
+                if (c.hora_inicio) {
+                    const dow = parseDia(c.dia);
+                    if (dow !== null && dow !== undefined) {
                         // crear evento recurrente simple (usando daysOfWeek)
                         window.calendar.addEvent({
                             title: c.nombre,
@@ -162,6 +172,8 @@
                             endTime: c.hora_fin || '10:00:00',
                             extendedProps: { curso_id: c.id }
                         });
+                    } else {
+                        console.warn('parseDia returned null for dia:', c.dia, 'curso:', c);
                     }
                 }
             });

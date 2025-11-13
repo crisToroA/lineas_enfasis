@@ -206,7 +206,7 @@ try {
 	        echo json_encode(['success' => false, 'message' => 'Error de preparación SQL al guardar curso.']);
 	        exit;
 	    }
-	    $istmt->bind_param('sssiiiss', $nombre, $codigo, $semestre, $profesor_id, $linea_enfasis_id, $dia, $hora_inicio, $hora_fin);
+	    $istmt->bind_param('sssiisss', $nombre, $codigo, $semestre, $profesor_id, $linea_enfasis_id, $dia, $hora_inicio, $hora_fin);
 
 	    if ($istmt->execute()) {
 	        echo json_encode(['success' => true, 'course_id' => $conn->insert_id]);
@@ -224,7 +224,7 @@ try {
 	    try {
 	        $linea = isset($_GET['linea_enfasis_id']) ? intval($_GET['linea_enfasis_id']) : 0;
 	        if ($linea > 0) {
-	            $sql = "SELECT c.id, c.nombre, c.codigo, c.semestre, u.nombre AS profesor_nombre, le.nombre AS linea_enfasis_nombre
+	            $sql = "SELECT c.id, c.nombre, c.codigo, c.semestre, c.dia, c.hora_inicio, c.hora_fin, c.linea_enfasis_id, u.nombre AS profesor_nombre, le.nombre AS linea_enfasis_nombre
 	                    FROM cursos c
 	                    JOIN usuarios u ON c.profesor_id = u.id
 	                    JOIN lineas_enfasis le ON c.linea_enfasis_id = le.id
@@ -238,7 +238,7 @@ try {
 	            }
 	            $stmt->bind_param('i', $linea);
 	        } else {
-	            $sql = "SELECT c.id, c.nombre, c.codigo, c.semestre, u.nombre AS profesor_nombre, le.nombre AS linea_enfasis_nombre
+	            $sql = "SELECT c.id, c.nombre, c.codigo, c.semestre, c.dia, c.hora_inicio, c.hora_fin, c.linea_enfasis_id, u.nombre AS profesor_nombre, le.nombre AS linea_enfasis_nombre
 	                    FROM cursos c
 	                    JOIN usuarios u ON c.profesor_id = u.id
 	                    JOIN lineas_enfasis le ON c.linea_enfasis_id = le.id
@@ -255,6 +255,11 @@ try {
 	        $result = $stmt->get_result();
 	        $cursos = [];
 	        while ($row = $result->fetch_assoc()) {
+	            // normalizar campos de horario aunque puedan ser NULL
+	            $row['dia'] = isset($row['dia']) ? $row['dia'] : null;
+	            $row['hora_inicio'] = isset($row['hora_inicio']) ? $row['hora_inicio'] : null;
+	            $row['hora_fin'] = isset($row['hora_fin']) ? $row['hora_fin'] : null;
+	            $row['linea_enfasis_id'] = isset($row['linea_enfasis_id']) ? intval($row['linea_enfasis_id']) : null;
 	            $cursos[] = $row;
 	        }
 	        // devolver siempre objeto con success para que el frontend lo interprete fácilmente

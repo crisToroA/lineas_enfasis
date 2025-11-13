@@ -411,12 +411,91 @@
             });
             window.studentCalendar.render();
             cargarActividadesAlumno(usuarioId);
+            // Cargar las clases (horarios de los cursos) asociadas a la línea del estudiante
+            try { if (typeof cargarClasesAlumno === 'function') cargarClasesAlumno(usuarioId, linea.linea_enfasis_id || linea.linea_enfasis_id); } catch(e) { console.warn('cargarClasesAlumno invoke error', e); }
         }
 
         // calcular promedio y mostrar
         cargarPromedio(usuarioId);
 
         // El formulario de envío de solicitudes fue removido de la vista 'Mi Línea'.
+    }
+
+    // Cargar clases (horarios) del estudiante: consulta cursos por línea y añade eventos recurrentes al calendario
+    async function cargarClasesAlumno(usuarioId, lineaId) {
+        if (!usuarioId || !lineaId) return;
+        if (!window.studentCalendar) return;
+        try {
+            // eliminar eventos de tipo 'clase' previos
+            try {
+                const evs = window.studentCalendar.getEvents() || [];
+                evs.forEach(ev => { if (ev.extendedProps && ev.extendedProps.tipo === 'clase') ev.remove(); });
+            } catch (e) { /* ignore */ }
+
+            const res = await fetch(`../php/coordinador_actions.php?action=list_cursos&linea_enfasis_id=${encodeURIComponent(lineaId)}`, { cache: 'no-store' });
+            if (!res.ok) { console.warn('list_cursos HTTP', res.status); return; }
+            const data = await res.json();
+            // data may be { success:true, data: [...] } or an array
+            const cursos = Array.isArray(data) ? data : (data.data || []);
+
+            // DEBUG: mostrar en consola la respuesta para diagnóstico
+            try { console.log('list_cursos response for linea', lineaId, data); } catch(e){}
+
+            if (!Array.isArray(cursos) || cursos.length === 0) {
+                // mostrar mensaje liviano en la UI para que el usuario sepa que no hay cursos
+                const dbg = document.getElementById('linesDebug'); if (dbg) { dbg.style.display = 'block'; dbg.textContent = 'No se encontraron cursos para su línea (respuesta vacía).'; }
+                return;
+            }
+
+            // verificar que al menos un curso tenga campos de horario
+            const hasHorario = cursos.some(c => (c.dia !== null && c.dia !== undefined && c.hora_inicio) || (c.hora_inicio && c.hora_fin));
+            if (!hasHorario) {
+                const dbg = document.getElementById('linesDebug'); if (dbg) { dbg.style.display = 'block'; dbg.textContent = 'Los cursos existen pero no tienen día/hora definidos en la base de datos.'; }
+                console.warn('list_cursos: cursos devueltos sin dia/hora', cursos.slice(0,5));
+                // aún así no retornar; evitamos intentar crear eventos sin horarios
+            }
+
+            // helper para mapear día (puede ser número string "0"-"6" o nombre en español con/sin acento)
+            function parseDia(dia) {
+                if (dia === null || dia === undefined) return null;
+                // si es un número (string o número), convertir directamente a int (0=Dom, 1=Lun, ..., 6=Sáb)
+                const asNum = parseInt(dia, 10);
+                if (!isNaN(asNum) && asNum >= 0 && asNum <= 6) {
+                    return asNum; // retorna 0-6 directamente
+                }
+                // si es un nombre, normalizar y mapear
+                const dowMap = { 'lunes':1,'martes':2,'miercoles':3,'miércoles':3,'jueves':4,'viernes':5,'sábado':6,'sabado':6,'domingo':0 };
+                const norm = String(dia).trim().toLowerCase().replace(/í/g,'i').replace(/ó/g,'o').replace(/á/g,'a').replace(/é/g,'e').replace(/ú/g,'u').replace(/ñ/g,'n');
+                return dowMap[norm] !== undefined ? dowMap[norm] : null;
+            }
+
+            cursos.forEach(c => {
+                const dow = parseDia(c.dia);
+                const startTime = c.hora_inicio || '';
+                const endTime = c.hora_fin || '';
+                const title = c.nombre || ('Curso ' + (c.codigo || c.id || ''));
+
+                // si no hay información de día válida, saltar
+                if (dow === null || dow === undefined) {
+                    console.warn('parseDia returned null for dia:', c.dia, 'curso:', c);
+                    return;
+                }
+
+                // create event with daysOfWeek recurrence if time provided
+                const ev = {
+                    title: title,
+                    daysOfWeek: [dow],
+                    startTime: startTime || '08:00:00',
+                    endTime: endTime || '10:00:00',
+                    allDay: false,
+                    extendedProps: { curso_id: c.id, tipo: 'clase' }
+                };
+
+                try { window.studentCalendar.addEvent(ev); } catch (e) { console.warn('addEvent clase error', e); }
+            });
+        } catch (err) {
+            console.error('cargarClasesAlumno error', err);
+        }
     }
 
     // Cargar actividades del alumno y ponerlas en el calendario
@@ -426,13 +505,18 @@
             const j = await res.json();
             if (j.success && Array.isArray(j.data)) {
                 const events = j.data.map(a => ({
-                    id: a.id,
+                    id: 'act_' + (a.id || Math.random().toString(36).slice(2,8)),
                     title: a.titulo,
                     start: a.fecha_entrega,
-                    extendedProps: { descripcion: a.descripcion, prioridad: a.prioridad }
+                    allDay: true,
+                    extendedProps: { descripcion: a.descripcion, prioridad: a.prioridad, tipo: 'actividad' }
                 }));
                 if (window.studentCalendar) {
-                    window.studentCalendar.removeAllEvents();
+                    // eliminar sólo eventos previos de tipo 'actividad' (no tocar eventos de 'clase')
+                    try {
+                        const evs = window.studentCalendar.getEvents() || [];
+                        evs.forEach(ev => { if (ev.extendedProps && ev.extendedProps.tipo === 'actividad') ev.remove(); });
+                    } catch (e) { /* ignore */ }
                     events.forEach(ev => window.studentCalendar.addEvent(ev));
                 }
             }
